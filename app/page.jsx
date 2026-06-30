@@ -413,7 +413,7 @@ export default function BugTracker() {
             disabled={syncing}
           >
             <RefreshCw size={15} className={syncing ? "bt-spin" : ""} />
-            {syncing ? "Syncing…" : view === "bugs" ? "Sync bugs from Discord" : "Sync suggestions from Discord"}
+            {syncing ? "Syncing…" : "Sync from Discord"}
           </button>
           <button
             className="bt-btn"
@@ -797,6 +797,7 @@ const styles = {
   secondaryBtn: {
     display: "flex",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     background: "transparent",
     color: "#cdd5db",
@@ -807,6 +808,7 @@ const styles = {
     fontSize: 14,
     cursor: "pointer",
     fontFamily: "var(--font-body), system-ui, sans-serif",
+    minWidth: 168,
   },
   syncBanner: {
     maxWidth: 760,
