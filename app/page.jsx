@@ -42,85 +42,42 @@ export default function BugTracker() {
   const [passError, setPassError] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [myVotes, setMyVotes] = useState({}); // { [suggestionId]: "up" | "down" }
-  const [voterName, setVoterName] = useState("");
-  const [voteError, setVoteError] = useState(null);
 
-  // Remember the typed name for convenience only — it's not used for any
-  // access control by itself, the server checks it against the whitelist.
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("evolve-voter-name");
-      if (stored) setVoterName(stored);
+      const stored = localStorage.getItem("evolve-suggestion-votes");
+      if (stored) setMyVotes(JSON.parse(stored));
     } catch (e) {
-      // ignore
+      // ignore — voting will just not be remembered this session
     }
   }, []);
 
-  // Once a name is set, pull that person's existing votes from the server
-  // so their state is consistent no matter what device/browser they're on.
-  useEffect(() => {
-    if (!voterName.trim()) {
-      setMyVotes({});
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/suggestions/votes?voter=${encodeURIComponent(voterName.trim())}`);
-        if (!res.ok) return;
-        const map = await res.json();
-        if (!cancelled) setMyVotes(map);
-      } catch (e) {
-        // ignore — votes will just not be pre-filled
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [voterName]);
-
-  function updateVoterName(name) {
-    setVoterName(name);
-    setVoteError(null);
-    try {
-      localStorage.setItem("evolve-voter-name", name);
-    } catch (e) {
-      // ignore
-    }
-  }
-
   async function castVote(itemId, type) {
-    const name = voterName.trim();
-    if (!name) {
-      setVoteError("Enter your name above before voting.");
-      return;
-    }
     const previousType = myVotes[itemId] || null;
     const nextType = previousType === type ? null : type; // clicking your current vote again retracts it
     try {
       const res = await fetch(`/api/suggestions/${itemId}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voterName: name, type: nextType }),
+        body: JSON.stringify({ type: nextType, previousType }),
       });
-      if (res.status === 403) {
-        setVoteError("That name isn't on the staff voting list. Ask a moderator to add you.");
-        return;
-      }
       if (!res.ok) throw new Error("failed");
       const counts = await res.json();
       setSuggestions((prev) =>
         (prev || []).map((s) => (s.id === itemId ? { ...s, upvotes: counts.upvotes, downvotes: counts.downvotes } : s))
       );
-      setMyVotes((prev) => {
-        const next = { ...prev };
-        if (nextType) next[itemId] = nextType;
-        else delete next[itemId];
-        return next;
-      });
-      setVoteError(null);
+      const nextVotes = { ...myVotes };
+      if (nextType) nextVotes[itemId] = nextType;
+      else delete nextVotes[itemId];
+      setMyVotes(nextVotes);
+      try {
+        localStorage.setItem("evolve-suggestion-votes", JSON.stringify(nextVotes));
+      } catch (e) {
+        // ignore
+      }
+      setError(null);
     } catch (e) {
-      setVoteError("Couldn't record your vote — try again.");
+      setError("Couldn't record your vote — try again.");
     }
   }
 
@@ -525,23 +482,6 @@ export default function BugTracker() {
         </div>
       )}
 
-      {view === "suggestions" && (
-        <div style={styles.voterBar}>
-          <label style={styles.voterLabel}>
-            Voting as
-            <input
-              className="bt-input"
-              style={styles.voterInput}
-              value={voterName}
-              onChange={(e) => updateVoterName(e.target.value)}
-              placeholder="Your staff name"
-              autoComplete="off"
-            />
-          </label>
-          {voteError && <span style={styles.passError}>{voteError}</span>}
-        </div>
-      )}
-
       <div style={styles.controlsRow}>
         <div style={styles.tabs}>
           {[
@@ -916,32 +856,6 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 10,
-  },
-  voterBar: {
-    maxWidth: 760,
-    margin: "0 auto 14px",
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-  voterLabel: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 12.5,
-    color: "#8b97a1",
-    fontFamily: "system-ui, sans-serif",
-  },
-  voterInput: {
-    background: "#11151a",
-    border: "1px solid #344049",
-    borderRadius: 6,
-    padding: "6px 10px",
-    color: "#e6e9ec",
-    fontSize: 13,
-    fontFamily: "system-ui, sans-serif",
-    width: 180,
   },
   passError: {
     fontSize: 12.5,

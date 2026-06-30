@@ -16,8 +16,9 @@ everyone sees changes without refreshing.
   see bugs, suggestions, and notes.
 - **Adding/editing bugs & suggestions** (status changes, dev notes, delete)
   requires the edit passcode (`EDIT_PASSCODE`).
-- **Voting on suggestions** requires typing a name that's on the
-  `VOTE_WHITELIST`.
+- **Voting on suggestions** is open to anyone with the link — no name or
+  passcode needed. Each browser can only vote once per suggestion (tracked
+  locally), and clicking a vote again switches or retracts it.
 
 ## Preview it first (no setup required)
 
@@ -89,7 +90,6 @@ git push -u origin main
    | `TURSO_DATABASE_URL` | the `libsql://...` URL from Turso |
    | `TURSO_AUTH_TOKEN` | the auth token from Turso |
    | `EDIT_PASSCODE` | whatever passcode your editor should use (e.g. `EvolveBugReporter`) |
-   | `VOTE_WHITELIST` | comma-separated staff names allowed to vote, e.g. `Steve,Anna,Mike` |
 
 3. Click **Deploy**. After a minute or two, Vercel gives you a live URL like
    `evolve-bug-tracker.vercel.app` — that's your standalone site.
@@ -113,11 +113,12 @@ The edit passcode is checked on the server for every add/edit/delete
 request — it's not just hidden in the UI. Viewing the board never requires
 it.
 
-Voting requires a name on `VOTE_WHITELIST` (case-insensitive match). Votes
-are tracked server-side per name, so the same person's vote follows them
-across devices and can be switched (up↔down) or retracted by clicking their
-current vote again.
+Voting is open to anyone with the link. Each suggestion remembers your
+vote in your browser's local storage, so you can't double-vote from the
+same browser, and clicking a vote again switches it (up↔down) or retracts
+it. This isn't tied to an account, so clearing browser data or voting from
+a different device would let someone vote again — fine for casual staff
+use, not meant to be airtight.
 
-If you ever want to rotate the passcode or update the voting whitelist,
-change the corresponding environment variable in your Vercel project
-settings and redeploy.
+If you ever want to rotate the passcode, change `EDIT_PASSCODE` in your
+Vercel project settings and redeploy.
