@@ -3,3 +3,5 @@ node_modules
 .env
 .env.local
 *.log
+local-preview.db
+local-preview.db-*

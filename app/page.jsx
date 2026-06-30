@@ -25,7 +25,9 @@ const EMBERS = [
 ];
 
 export default function BugTracker() {
+  const [view, setView] = useState("bugs"); // "bugs" | "suggestions"
   const [bugs, setBugs] = useState(null);
+  const [suggestions, setSuggestions] = useState(null);
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState("open");
@@ -40,6 +42,44 @@ export default function BugTracker() {
   const [passError, setPassError] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
+  const endpoint = view === "bugs" ? "/api/bugs" : "/api/suggestions";
+  const items = view === "bugs" ? bugs : suggestions;
+  const setItems = view === "bugs" ? setBugs : setSuggestions;
+
+  const LABELS = {
+    bugs: {
+      tabLabel: "Bugs",
+      addBtn: "Log a bug",
+      titlePlaceholder: "e.g. Dragon fire spell phases through prayer",
+      reporterLabel: "Reported by",
+      reporterPlaceholder: "Player name",
+      descPlaceholder: "Steps to reproduce, what happened, what should happen…",
+      submitBtn: "Add to board",
+      emptyOpen: "Nothing open. The realm is, for now, bug-free.",
+      emptyInProgress: "Nothing being worked on right now.",
+      emptyFixed: "No fixed reports yet.",
+      emptyAll: "No bugs logged yet. Click \"Log a bug\" to start the board.",
+      fixedLabel: "Mark fixed",
+      reopenLabel: "Reopen",
+      reportedByName: (r) => r,
+    },
+    suggestions: {
+      tabLabel: "Suggestions",
+      addBtn: "Log a suggestion",
+      titlePlaceholder: "e.g. Add a slayer task reroll option",
+      reporterLabel: "Suggested by",
+      reporterPlaceholder: "Player name",
+      descPlaceholder: "What's the idea, and why would it help the server?",
+      submitBtn: "Add suggestion",
+      emptyOpen: "No open suggestions right now.",
+      emptyInProgress: "Nothing being worked on right now.",
+      emptyFixed: "No suggestions implemented yet.",
+      emptyAll: "No suggestions logged yet. Click \"Log a suggestion\" to start.",
+      fixedLabel: "Mark implemented",
+      reopenLabel: "Reopen",
+    },
+  }[view];
+
   function authHeaders() {
     return { "Content-Type": "application/json", "x-edit-passcode": editPasscode };
   }
@@ -47,24 +87,29 @@ export default function BugTracker() {
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchBugs() {
+    async function fetchOne(url, setter) {
       try {
-        const res = await fetch("/api/bugs", { cache: "no-store" });
+        const res = await fetch(url, { cache: "no-store" });
         if (!res.ok) throw new Error("fetch failed");
         const next = await res.json();
         if (!cancelled) {
-          setBugs((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+          setter((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
         }
       } catch (e) {
-        if (!cancelled) setBugs((prev) => prev ?? []);
+        if (!cancelled) setter((prev) => prev ?? []);
       }
     }
 
+    function fetchAll() {
+      fetchOne("/api/bugs", setBugs);
+      fetchOne("/api/suggestions", setSuggestions);
+    }
+
     // initial load
-    fetchBugs();
+    fetchAll();
 
     // poll for changes from other staff every few seconds
-    const interval = setInterval(fetchBugs, 4000);
+    const interval = setInterval(fetchAll, 4000);
 
     return () => {
       cancelled = true;
@@ -96,20 +141,20 @@ export default function BugTracker() {
     setForm({ title: "", description: "", reporter: "", priority: "medium" });
   }
 
-  async function refreshBugs() {
+  async function refreshItems() {
     try {
-      const res = await fetch("/api/bugs", { cache: "no-store" });
+      const res = await fetch(endpoint, { cache: "no-store" });
       const next = await res.json();
-      setBugs(next);
+      setItems(next);
     } catch (e) {
       setError("Couldn't refresh the board.");
     }
   }
 
-  async function addBug() {
+  async function addItem() {
     if (!unlocked || !form.title.trim()) return;
     try {
-      const res = await fetch("/api/bugs", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify(form),
@@ -117,54 +162,54 @@ export default function BugTracker() {
       if (!res.ok) throw new Error("failed");
       resetForm();
       setShowForm(false);
-      await refreshBugs();
+      await refreshItems();
       setError(null);
     } catch (e) {
-      setError("Couldn't add the bug — try again.");
+      setError(view === "bugs" ? "Couldn't add the bug — try again." : "Couldn't add the suggestion — try again.");
     }
   }
 
   async function setStatus(id, status) {
     if (!unlocked) return;
     try {
-      const res = await fetch(`/api/bugs/${id}`, {
+      const res = await fetch(`${endpoint}/${id}`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ status }),
       });
       if (!res.ok) throw new Error("failed");
-      await refreshBugs();
+      await refreshItems();
       setError(null);
     } catch (e) {
-      setError("Couldn't update that bug — try again.");
+      setError("Couldn't update that entry — try again.");
     }
   }
 
-  async function removeBug(id) {
+  async function removeItem(id) {
     if (!unlocked) return;
     try {
-      const res = await fetch(`/api/bugs/${id}`, {
+      const res = await fetch(`${endpoint}/${id}`, {
         method: "DELETE",
         headers: authHeaders(),
       });
       if (!res.ok) throw new Error("failed");
-      await refreshBugs();
+      await refreshItems();
       setError(null);
     } catch (e) {
-      setError("Couldn't delete that bug — try again.");
+      setError("Couldn't delete that entry — try again.");
     }
   }
 
-  function toggleNoteForm(bugId) {
+  function toggleNoteForm(itemId) {
     if (!unlocked) return;
-    setNoteFormOpenFor((cur) => (cur === bugId ? null : bugId));
+    setNoteFormOpenFor((cur) => (cur === itemId ? null : itemId));
     setNoteDraft({ author: "", content: "" });
   }
 
-  async function addBugNote(bugId) {
+  async function addItemNote(itemId) {
     if (!unlocked || !noteDraft.content.trim()) return;
     try {
-      const res = await fetch(`/api/bugs/${bugId}/notes`, {
+      const res = await fetch(`${endpoint}/${itemId}/notes`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify(noteDraft),
@@ -172,29 +217,29 @@ export default function BugTracker() {
       if (!res.ok) throw new Error("failed");
       setNoteDraft({ author: "", content: "" });
       setNoteFormOpenFor(null);
-      await refreshBugs();
+      await refreshItems();
       setError(null);
     } catch (e) {
       setError("Couldn't post the note — try again.");
     }
   }
 
-  async function removeBugNote(bugId, noteId) {
+  async function removeItemNote(itemId, noteId) {
     if (!unlocked) return;
     try {
-      const res = await fetch(`/api/bugs/${bugId}/notes/${noteId}`, {
+      const res = await fetch(`${endpoint}/${itemId}/notes/${noteId}`, {
         method: "DELETE",
         headers: authHeaders(),
       });
       if (!res.ok) throw new Error("failed");
-      await refreshBugs();
+      await refreshItems();
       setError(null);
     } catch (e) {
       setError("Couldn't delete that note — try again.");
     }
   }
 
-  if (bugs === null) {
+  if (items === null) {
     return (
       <div style={styles.page}>
         <div style={styles.loading}>Loading the report board…</div>
@@ -203,7 +248,7 @@ export default function BugTracker() {
   }
 
   const order = { high: 0, medium: 1, low: 2 };
-  const visible = bugs
+  const visible = items
     .filter((b) => (filter === "all" ? true : b.status === filter))
     .sort((a, b) => {
       if (sortBy === "date") {
@@ -213,10 +258,10 @@ export default function BugTracker() {
     });
 
   const counts = {
-    open: bugs.filter((b) => b.status === "open").length,
-    inProgress: bugs.filter((b) => b.status === "in-progress").length,
-    fixed: bugs.filter((b) => b.status === "fixed").length,
-    all: bugs.length,
+    open: items.filter((b) => b.status === "open").length,
+    inProgress: items.filter((b) => b.status === "in-progress").length,
+    fixed: items.filter((b) => b.status === "fixed").length,
+    all: items.length,
   };
 
   return (
@@ -320,7 +365,7 @@ export default function BugTracker() {
                 onClick={() => setShowForm((s) => !s)}
               >
                 {showForm ? <X size={16} /> : <Plus size={16} />}
-                {showForm ? "Close" : "Log a bug"}
+                {showForm ? "Close" : LABELS.addBtn}
               </button>
             </>
           ) : (
@@ -330,6 +375,29 @@ export default function BugTracker() {
           )}
         </div>
       </header>
+
+      <div style={styles.viewSwitch}>
+        {["bugs", "suggestions"].map((v) => (
+          <button
+            key={v}
+            className="bt-tab"
+            onClick={() => {
+              setView(v);
+              setShowForm(false);
+              setNoteFormOpenFor(null);
+              setFilter("open");
+            }}
+            style={{
+              ...styles.viewTab,
+              color: view === v ? "#1a1712" : "#cdd5db",
+              background: view === v ? "linear-gradient(180deg, #e9c876 0%, #c9a153 100%)" : "transparent",
+            }}
+          >
+            {v === "bugs" ? "Bugs" : "Suggestions"}
+          </button>
+        ))}
+      </div>
+
 
       {showUnlock && !unlocked && (
         <div className="bt-card" style={styles.unlockForm}>
@@ -435,23 +503,23 @@ export default function BugTracker() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    addBug();
+                    addItem();
                   }
                 }}
-                placeholder="e.g. Dragon fire spell phases through prayer"
+                placeholder={LABELS.titlePlaceholder}
                 autoFocus
               />
             </label>
           </div>
           <div style={styles.formRow2}>
             <label style={styles.label}>
-              Reported by
+              {LABELS.reporterLabel}
               <input
                 className="bt-input"
                 style={styles.input}
                 value={form.reporter}
                 onChange={(e) => setForm({ ...form, reporter: e.target.value })}
-                placeholder="Player name"
+                placeholder={LABELS.reporterPlaceholder}
               />
             </label>
             <label style={styles.label}>
@@ -487,12 +555,12 @@ export default function BugTracker() {
               style={{ ...styles.input, minHeight: 80, resize: "vertical" }}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Steps to reproduce, what happened, what should happen…"
+              placeholder={LABELS.descPlaceholder}
             />
           </label>
           <div style={styles.formActions}>
-            <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={addBug}>
-              Add to board
+            <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={addItem}>
+              {LABELS.submitBtn}
             </button>
           </div>
         </div>
@@ -502,22 +570,22 @@ export default function BugTracker() {
         {visible.length === 0 && (
           <div style={styles.empty}>
             {filter === "open"
-              ? "Nothing open. The realm is, for now, bug-free."
+              ? LABELS.emptyOpen
               : filter === "in-progress"
-              ? "Nothing being worked on right now."
+              ? LABELS.emptyInProgress
               : filter === "fixed"
-              ? "No fixed reports yet."
-              : "No bugs logged yet. Click \"Log a bug\" to start the board."}
+              ? LABELS.emptyFixed
+              : LABELS.emptyAll}
           </div>
         )}
-        {visible.map((bug) => {
-          const p = PRIORITIES.find((x) => x.id === bug.priority) || PRIORITIES[1];
+        {visible.map((item) => {
+          const p = PRIORITIES.find((x) => x.id === item.priority) || PRIORITIES[1];
           const Icon = p.icon;
-          const fixed = bug.status === "fixed";
-          const inProgress = bug.status === "in-progress";
+          const fixed = item.status === "fixed";
+          const inProgress = item.status === "in-progress";
           return (
             <div
-              key={bug.id}
+              key={item.id}
               className="bt-card"
               style={{
                 ...styles.card,
@@ -534,46 +602,46 @@ export default function BugTracker() {
                     In progress
                   </span>
                 )}
-                <h3 style={{ ...styles.cardTitle, textDecoration: fixed ? "line-through" : "none" }}>{bug.title}</h3>
+                <h3 style={{ ...styles.cardTitle, textDecoration: fixed ? "line-through" : "none" }}>{item.title}</h3>
               </div>
-              {bug.description && <p style={styles.cardDesc}>{bug.description}</p>}
+              {item.description && <p style={styles.cardDesc}>{item.description}</p>}
               <div style={styles.cardMeta}>
-                <span>Reported by <strong style={{ color: "#e9c876" }}>{bug.reporter}</strong></span>
+                <span>{LABELS.reporterLabel} <strong style={{ color: "#e9c876" }}>{item.reporter}</strong></span>
                 <span style={styles.dot}>•</span>
-                <span>{new Date(bug.reportedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+                <span>{new Date(item.reportedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
               </div>
               {unlocked && (
               <div style={styles.cardActions}>
-                {bug.status === "open" && (
-                  <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(bug.id, "in-progress")}>
+                {item.status === "open" && (
+                  <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(item.id, "in-progress")}>
                     <Flame size={14} /> Start work
                   </button>
                 )}
-                {bug.status === "in-progress" && (
-                  <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(bug.id, "open")}>
+                {item.status === "in-progress" && (
+                  <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(item.id, "open")}>
                     <RotateCcw size={14} /> Back to open
                   </button>
                 )}
-                {bug.status !== "fixed" && (
-                  <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(bug.id, "fixed")}>
-                    <CheckCircle2 size={14} /> Mark fixed
+                {item.status !== "fixed" && (
+                  <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(item.id, "fixed")}>
+                    <CheckCircle2 size={14} /> {LABELS.fixedLabel}
                   </button>
                 )}
                 {fixed && (
-                  <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(bug.id, "open")}>
-                    <RotateCcw size={14} /> Reopen
+                  <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(item.id, "open")}>
+                    <RotateCcw size={14} /> {LABELS.reopenLabel}
                   </button>
                 )}
-                <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => toggleNoteForm(bug.id)}>
-                  <NotebookPen size={14} /> {noteFormOpenFor === bug.id ? "Cancel note" : "Add dev note"}
+                <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => toggleNoteForm(item.id)}>
+                  <NotebookPen size={14} /> {noteFormOpenFor === item.id ? "Cancel note" : "Add dev note"}
                 </button>
-                <button className="bt-icon-btn" style={{ ...styles.actionBtn, color: "#9a6b5e" }} onClick={() => removeBug(bug.id)}>
+                <button className="bt-icon-btn" style={{ ...styles.actionBtn, color: "#9a6b5e" }} onClick={() => removeItem(item.id)}>
                   <Trash2 size={14} /> Delete
                 </button>
               </div>
               )}
 
-              {noteFormOpenFor === bug.id && (
+              {noteFormOpenFor === item.id && (
                 <div style={styles.noteForm}>
                   <input
                     className="bt-input"
@@ -588,19 +656,19 @@ export default function BugTracker() {
                     style={{ ...styles.input, minHeight: 64, resize: "vertical" }}
                     value={noteDraft.content}
                     onChange={(e) => setNoteDraft({ ...noteDraft, content: e.target.value })}
-                    placeholder="What are you working on for this bug?"
+                    placeholder={view === "bugs" ? "What are you working on for this bug?" : "What's the plan for this suggestion?"}
                   />
                   <div style={styles.formActions}>
-                    <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={() => addBugNote(bug.id)}>
+                    <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={() => addItemNote(item.id)}>
                       Post note
                     </button>
                   </div>
                 </div>
               )}
 
-              {bug.notes && bug.notes.length > 0 && (
+              {item.notes && item.notes.length > 0 && (
                 <div style={styles.noteList}>
-                  {bug.notes
+                  {item.notes
                     .slice()
                     .sort((a, b) => new Date(b.postedAt) - new Date(a.postedAt))
                     .map((note) => (
@@ -618,7 +686,7 @@ export default function BugTracker() {
                             <button
                               className="bt-icon-btn"
                               style={{ ...styles.actionBtn, padding: "2px 7px", marginLeft: "auto" }}
-                              onClick={() => removeBugNote(bug.id, note.id)}
+                              onClick={() => removeItemNote(item.id, note.id)}
                             >
                               <Trash2 size={12} />
                             </button>

@@ -5,11 +5,35 @@ This is a standalone version of your bug tracker. It runs as a normal website
 use it at once from any browser.
 
 It keeps everything the Claude artifact version had: priority sorting, status
-tracking (Open / In progress / Fixed), per-bug dev notes, the passcode-gated
-editing, and the animated background. It still polls for updates every 4
-seconds so everyone sees changes without refreshing.
+tracking (Open / In progress / Fixed), per-bug and per-suggestion dev notes,
+the passcode-gated editing, and the animated background. It still polls for
+updates every 4 seconds so everyone sees changes without refreshing.
 
-## What you need (all free)
+## Preview it first (no setup required)
+
+You can run this on your own computer and try it out before doing anything
+with GitHub, Vercel, or Turso. It automatically uses a local file as its
+database if it doesn't find Turso credentials, so there's nothing to
+configure.
+
+```bash
+npm install
+npm run dev
+```
+
+Then open `http://localhost:3000` in your browser. Click "Unlock to edit"
+and use the passcode `EvolveBugReporter` (or whatever you set in
+`.env.local` — see below) to try adding bugs, suggestions, and notes.
+
+This local mode is just for previewing — the data only lives on your machine
+and won't be shared with your team. Once you're happy with it, follow the
+deployment steps below to put it on a real shared URL.
+
+(If you want to set a custom passcode even for local preview, copy
+`.env.example` to `.env.local` and set `EDIT_PASSCODE` there before running
+`npm run dev`.)
+
+## What you need to deploy for real (all free)
 
 1. A [GitHub](https://github.com) account, to hold the code.
 2. A [Vercel](https://vercel.com) account, to host the site (sign up with
@@ -72,19 +96,6 @@ git push
 ```
 
 Vercel automatically redeploys on every push.
-
-## Running it locally first (optional)
-
-If you want to test it on your own machine before deploying:
-
-```bash
-npm install
-cp .env.example .env.local
-# edit .env.local and fill in your Turso URL/token and passcode
-npm run dev
-```
-
-Then open `http://localhost:3000`.
 
 ## Notes on the passcode system
 

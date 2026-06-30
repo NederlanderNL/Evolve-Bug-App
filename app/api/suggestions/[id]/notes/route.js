@@ -1,3 +1,3 @@
 import { createNoteHandlers } from "../../../../../lib/items";
 
-export const { POST } = createNoteHandlers("bugs");
+export const { POST } = createNoteHandlers("suggestions");
