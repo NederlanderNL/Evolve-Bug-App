@@ -190,6 +190,22 @@ export default function BugTracker() {
     }
   }
 
+  // Temporary: lets you try the triage panel without setting up the real
+  // Discord sync. Safe to remove once you've seen how it works.
+  async function seedTestTriage() {
+    try {
+      const res = await fetch("/api/seed-test-triage", { method: "POST" });
+      if (!res.ok) throw new Error("failed");
+      await Promise.all([
+        fetch("/api/bugs", { cache: "no-store" }).then((r) => r.json()).then(setBugs),
+        fetch("/api/suggestions", { cache: "no-store" }).then((r) => r.json()).then(setSuggestions),
+      ]);
+      setSyncMessage("Added test items — check the triage panel.");
+    } catch (e) {
+      setSyncMessage("Couldn't add test items.");
+    }
+  }
+
   async function addItem() {
     if (!form.title.trim()) return;
     try {
@@ -488,6 +504,15 @@ export default function BugTracker() {
           </div>
         </div>
         <div style={styles.headerActions}>
+          <button
+            type="button"
+            className="bt-btn"
+            style={{ ...styles.secondaryBtn, borderStyle: "dashed", minWidth: 0 }}
+            onClick={seedTestTriage}
+            title="Temporary: adds fake unsorted bugs/suggestions to try the triage panel"
+          >
+            Add test triage items
+          </button>
           <button
             className="bt-btn"
             style={styles.secondaryBtn}
