@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, Lock, Unlock, ThumbsUp, ThumbsDown } from "lucide-react";
+import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, ThumbsUp, ThumbsDown } from "lucide-react";
 
 const PRIORITIES = [
   { id: "high", label: "High", icon: Flame, color: "#e0654a", bg: "rgba(224,101,74,0.12)", border: "rgba(224,101,74,0.4)" },
@@ -35,12 +35,6 @@ export default function BugTracker() {
   const [form, setForm] = useState({ title: "", description: "", reporter: "", priority: "medium" });
   const [noteFormOpenFor, setNoteFormOpenFor] = useState(null);
   const [noteDraft, setNoteDraft] = useState({ author: "", content: "" });
-  const [unlocked, setUnlocked] = useState(false);
-  const [editPasscode, setEditPasscode] = useState(""); // sent as header once verified
-  const [showUnlock, setShowUnlock] = useState(false);
-  const [passInput, setPassInput] = useState("");
-  const [passError, setPassError] = useState(false);
-  const [showPass, setShowPass] = useState(false);
   const [myVotes, setMyVotes] = useState({}); // { [suggestionId]: "up" | "down" }
 
   useEffect(() => {
@@ -119,10 +113,6 @@ export default function BugTracker() {
     },
   }[view];
 
-  function authHeaders() {
-    return { "Content-Type": "application/json", "x-edit-passcode": editPasscode };
-  }
-
   useEffect(() => {
     let cancelled = false;
 
@@ -156,26 +146,6 @@ export default function BugTracker() {
     };
   }, []);
 
-  async function tryUnlock() {
-    try {
-      const res = await fetch("/api/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-edit-passcode": passInput.trim() },
-      });
-      if (!res.ok) {
-        setPassError(true);
-        return;
-      }
-      setEditPasscode(passInput.trim());
-      setUnlocked(true);
-      setShowUnlock(false);
-      setPassInput("");
-      setPassError(false);
-    } catch (e) {
-      setPassError(true);
-    }
-  }
-
   function resetForm() {
     setForm({ title: "", description: "", reporter: "", priority: "medium" });
   }
@@ -191,11 +161,11 @@ export default function BugTracker() {
   }
 
   async function addItem() {
-    if (!unlocked || !form.title.trim()) return;
+    if (!form.title.trim()) return;
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error("failed");
@@ -209,11 +179,10 @@ export default function BugTracker() {
   }
 
   async function setStatus(id, status) {
-    if (!unlocked) return;
     try {
       const res = await fetch(`${endpoint}/${id}`, {
         method: "PATCH",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
       if (!res.ok) throw new Error("failed");
@@ -225,11 +194,10 @@ export default function BugTracker() {
   }
 
   async function removeItem(id) {
-    if (!unlocked) return;
     try {
       const res = await fetch(`${endpoint}/${id}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) throw new Error("failed");
       await refreshItems();
@@ -240,17 +208,16 @@ export default function BugTracker() {
   }
 
   function toggleNoteForm(itemId) {
-    if (!unlocked) return;
     setNoteFormOpenFor((cur) => (cur === itemId ? null : itemId));
     setNoteDraft({ author: "", content: "" });
   }
 
   async function addItemNote(itemId) {
-    if (!unlocked || !noteDraft.content.trim()) return;
+    if (!noteDraft.content.trim()) return;
     try {
       const res = await fetch(`${endpoint}/${itemId}/notes`, {
         method: "POST",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(noteDraft),
       });
       if (!res.ok) throw new Error("failed");
@@ -264,11 +231,10 @@ export default function BugTracker() {
   }
 
   async function removeItemNote(itemId, noteId) {
-    if (!unlocked) return;
     try {
       const res = await fetch(`${endpoint}/${itemId}/notes/${noteId}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) throw new Error("failed");
       await refreshItems();
@@ -395,23 +361,14 @@ export default function BugTracker() {
           </div>
         </div>
         <div style={styles.headerActions}>
-          {unlocked ? (
-            <>
-              <span style={styles.unlockedTag}><Unlock size={12} /> Editing unlocked</span>
-              <button
-                className="bt-btn"
-                style={styles.primaryBtn}
-                onClick={() => setShowForm((s) => !s)}
-              >
-                {showForm ? <X size={16} /> : <Plus size={16} />}
-                {showForm ? "Close" : LABELS.addBtn}
-              </button>
-            </>
-          ) : (
-            <button className="bt-btn" style={styles.secondaryBtn} onClick={() => setShowUnlock((s) => !s)}>
-              <Lock size={15} /> {showUnlock ? "Close" : "Unlock to edit"}
-            </button>
-          )}
+          <button
+            className="bt-btn"
+            style={styles.primaryBtn}
+            onClick={() => setShowForm((s) => !s)}
+          >
+            {showForm ? <X size={16} /> : <Plus size={16} />}
+            {showForm ? "Close" : LABELS.addBtn}
+          </button>
         </div>
       </header>
 
@@ -436,51 +393,6 @@ export default function BugTracker() {
           </button>
         ))}
       </div>
-
-      {showUnlock && !unlocked && (
-        <div className="bt-card" style={styles.unlockForm}>
-          <label style={styles.label}>
-            Edit passcode
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                className="bt-input"
-                style={{ ...styles.input, flex: 1 }}
-                type={showPass ? "text" : "password"}
-                value={passInput}
-                onChange={(e) => {
-                  setPassInput(e.target.value);
-                  setPassError(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    tryUnlock();
-                  }
-                }}
-                placeholder="Enter the staff edit passcode"
-                autoFocus
-                autoComplete="off"
-                autoCapitalize="off"
-                spellCheck="false"
-              />
-              <button
-                type="button"
-                className="bt-icon-btn"
-                style={styles.actionBtn}
-                onClick={() => setShowPass((s) => !s)}
-              >
-                {showPass ? "Hide" : "Show"}
-              </button>
-            </div>
-          </label>
-          {passError && <span style={styles.passError}>That passcode isn't right. Try again.</span>}
-          <div style={styles.formActions}>
-            <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={tryUnlock}>
-              Unlock
-            </button>
-          </div>
-        </div>
-      )}
 
       <div style={styles.controlsRow}>
         <div style={styles.tabs}>
@@ -680,7 +592,6 @@ export default function BugTracker() {
                   )}
                 </div>
               )}
-              {unlocked && (
               <div style={styles.cardActions}>
                 {item.status === "open" && (
                   <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(item.id, "in-progress")}>
@@ -709,7 +620,6 @@ export default function BugTracker() {
                   <Trash2 size={14} /> Delete
                 </button>
               </div>
-              )}
 
               {noteFormOpenFor === item.id && (
                 <div style={styles.noteForm}>
@@ -752,15 +662,13 @@ export default function BugTracker() {
                             {" at "}
                             {new Date(note.postedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
                           </span>
-                          {unlocked && (
-                            <button
-                              className="bt-icon-btn"
-                              style={{ ...styles.actionBtn, padding: "2px 7px", marginLeft: "auto" }}
-                              onClick={() => removeItemNote(item.id, note.id)}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          )}
+                          <button
+                            className="bt-icon-btn"
+                            style={{ ...styles.actionBtn, padding: "2px 7px", marginLeft: "auto" }}
+                            onClick={() => removeItemNote(item.id, note.id)}
+                          >
+                            <Trash2 size={12} />
+                          </button>
                         </div>
                         <p style={{ ...styles.cardDesc, margin: 0, whiteSpace: "pre-wrap" }}>{note.content}</p>
                       </div>
@@ -823,45 +731,6 @@ const styles = {
     fontFamily: "system-ui, sans-serif",
   },
   headerActions: { display: "flex", alignItems: "center", gap: 10 },
-  unlockedTag: {
-    display: "flex",
-    alignItems: "center",
-    gap: 4,
-    fontSize: 11.5,
-    color: "#3fb6c9",
-    fontFamily: "system-ui, sans-serif",
-    fontWeight: 600,
-  },
-  secondaryBtn: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    background: "transparent",
-    color: "#cdd5db",
-    border: "1px solid #344049",
-    borderRadius: 6,
-    padding: "10px 16px",
-    fontWeight: 600,
-    fontSize: 14,
-    cursor: "pointer",
-    fontFamily: "system-ui, sans-serif",
-  },
-  unlockForm: {
-    maxWidth: 760,
-    margin: "0 auto 20px",
-    background: "#1b2128",
-    border: "1px solid #344049",
-    borderRadius: 10,
-    padding: 18,
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  },
-  passError: {
-    fontSize: 12.5,
-    color: "#e0654a",
-    fontFamily: "system-ui, sans-serif",
-  },
   primaryBtn: {
     display: "flex",
     alignItems: "center",

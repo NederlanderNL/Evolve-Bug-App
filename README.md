@@ -6,19 +6,20 @@ use it at once from any browser.
 
 It keeps everything the Claude artifact version had: priority sorting, status
 tracking (Open / In progress / Fixed), per-bug and per-suggestion dev notes,
-suggestion voting (thumbs up/down, switchable), the passcode-gated editing,
-and the animated background. It still polls for updates every 4 seconds so
-everyone sees changes without refreshing.
+suggestion voting (thumbs up/down, switchable), and the animated background.
+It still polls for updates every 4 seconds so everyone sees changes without
+refreshing.
 
 ## Permissions
 
 - **Viewing** the board never requires anything — anyone with the link can
   see bugs, suggestions, and notes.
 - **Adding/editing bugs & suggestions** (status changes, dev notes, delete)
-  requires the edit passcode (`EDIT_PASSCODE`).
-- **Voting on suggestions** is open to anyone with the link — no name or
-  passcode needed. Each browser can only vote once per suggestion (tracked
-  locally), and clicking a vote again switches or retracts it.
+  is open to anyone with the link too — no login or passcode. (A proper
+  login system is planned to be added later on the main website instead.)
+- **Voting on suggestions** is open to anyone with the link. Each browser
+  can only vote once per suggestion (tracked locally), and clicking a vote
+  again switches it or retracts it.
 
 ## Preview it first (no setup required)
 
@@ -32,17 +33,12 @@ npm install
 npm run dev
 ```
 
-Then open `http://localhost:3000` in your browser. Click "Unlock to edit"
-and use the passcode `EvolveBugReporter` (or whatever you set in
-`.env.local` — see below) to try adding bugs, suggestions, and notes.
+Then open `http://localhost:3000` in your browser and try adding bugs,
+suggestions, and notes.
 
 This local mode is just for previewing — the data only lives on your machine
 and won't be shared with your team. Once you're happy with it, follow the
 deployment steps below to put it on a real shared URL.
-
-(If you want to set a custom passcode even for local preview, copy
-`.env.example` to `.env.local` and set `EDIT_PASSCODE` there before running
-`npm run dev`.)
 
 ## What you need to deploy for real (all free)
 
@@ -89,7 +85,6 @@ git push -u origin main
    |---|---|
    | `TURSO_DATABASE_URL` | the `libsql://...` URL from Turso |
    | `TURSO_AUTH_TOKEN` | the auth token from Turso |
-   | `EDIT_PASSCODE` | whatever passcode your editor should use (e.g. `EvolveBugReporter`) |
 
 3. Click **Deploy**. After a minute or two, Vercel gives you a live URL like
    `evolve-bug-tracker.vercel.app` — that's your standalone site.
@@ -107,18 +102,10 @@ git push
 
 Vercel automatically redeploys on every push.
 
-## Notes on the passcode and voting systems
+## A note on having no access control right now
 
-The edit passcode is checked on the server for every add/edit/delete
-request — it's not just hidden in the UI. Viewing the board never requires
-it.
-
-Voting is open to anyone with the link. Each suggestion remembers your
-vote in your browser's local storage, so you can't double-vote from the
-same browser, and clicking a vote again switches it (up↔down) or retracts
-it. This isn't tied to an account, so clearing browser data or voting from
-a different device would let someone vote again — fine for casual staff
-use, not meant to be airtight.
-
-If you ever want to rotate the passcode, change `EDIT_PASSCODE` in your
-Vercel project settings and redeploy.
+Anyone with the link can add, edit, or delete bugs and suggestions — there's
+no passcode or login at the moment. That's intentional for now since a real
+login system is planned to be wired in later on your main website. Until
+then, treat the link itself as the only thing keeping this private — don't
+post it anywhere public.
