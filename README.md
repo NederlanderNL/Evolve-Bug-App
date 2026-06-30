@@ -43,11 +43,17 @@ deployment steps below to put it on a real shared URL.
 ## Pulling bug reports and suggestions from Discord
 
 If your bug reports and/or suggestions live in Discord Forum channels
-(each report is its own thread/post), you can click **"Sync bugs from
-Discord"** in the Bugs tab, or **"Sync suggestions from Discord"** in the
-Suggestions tab, to pull new posts straight in. They're independent — each
-has its own forum channel(s) and its own "last synced" point, so syncing
-one doesn't touch the other.
+(each report is its own thread/post), the **"Sync from Discord"** button
+in the header pulls new posts straight in — it syncs whichever tab
+(Bugs or Suggestions) you're currently looking at. They're independent —
+each has its own forum channel(s) and its own "last synced" point, so
+syncing one doesn't touch the other.
+
+**Before you set up the real bot**, clicking "Sync from Discord" adds a
+small set of fake sample bugs/suggestions instead, so you can try out the
+triage panel right away. It won't keep adding duplicates if you click it
+again — once you add real `DISCORD_BOT_TOKEN`/channel credentials (see
+below), it automatically switches over to pulling real reports instead.
 
 - Each forum thread becomes one bug or suggestion (title = thread name,
   description = the original post, reporter = the post's author).

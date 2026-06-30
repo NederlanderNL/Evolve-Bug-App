@@ -177,8 +177,16 @@ export default function BugTracker() {
         return;
       }
       const parts = [];
-      parts.push(`Imported ${data.imported} new ${noun}${data.imported === 1 ? "" : "s"}`);
-      if (data.skippedDuplicate) parts.push(`skipped ${data.skippedDuplicate} likely duplicate${data.skippedDuplicate === 1 ? "" : "s"}`);
+      if (data.testMode) {
+        parts.push(
+          data.imported > 0
+            ? `Discord isn't connected yet — added ${data.imported} test ${noun}${data.imported === 1 ? "" : "s"} so you can try the triage panel`
+            : `Discord isn't connected yet — the test ${noun}s are already on the board`
+        );
+      } else {
+        parts.push(`Imported ${data.imported} new ${noun}${data.imported === 1 ? "" : "s"}`);
+        if (data.skippedDuplicate) parts.push(`skipped ${data.skippedDuplicate} likely duplicate${data.skippedDuplicate === 1 ? "" : "s"}`);
+      }
       setSyncMessage(parts.join(", ") + ".");
       if (data.imported > 0) {
         await refreshItems();
@@ -190,21 +198,6 @@ export default function BugTracker() {
     }
   }
 
-  // Temporary: lets you try the triage panel without setting up the real
-  // Discord sync. Safe to remove once you've seen how it works.
-  async function seedTestTriage() {
-    try {
-      const res = await fetch("/api/seed-test-triage", { method: "POST" });
-      if (!res.ok) throw new Error("failed");
-      await Promise.all([
-        fetch("/api/bugs", { cache: "no-store" }).then((r) => r.json()).then(setBugs),
-        fetch("/api/suggestions", { cache: "no-store" }).then((r) => r.json()).then(setSuggestions),
-      ]);
-      setSyncMessage("Added test items — check the triage panel.");
-    } catch (e) {
-      setSyncMessage("Couldn't add test items.");
-    }
-  }
 
   async function addItem() {
     if (!form.title.trim()) return;
@@ -348,6 +341,18 @@ export default function BugTracker() {
     <div style={styles.page}>
       <style>{`
         @keyframes riseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes panelFloatIn {
+          from { opacity: 0; transform: translate(-50%, -14px) scale(0.97); }
+          to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        }
+        @keyframes panelBob {
+          0%, 100% { transform: translate(-50%, 0); }
+          50%      { transform: translate(-50%, -4px); }
+        }
+        .bt-triage-panel {
+          animation: panelFloatIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both,
+                     panelBob 4.5s ease-in-out 0.35s infinite;
+        }
         .bt-card {
           animation: riseIn 0.25s ease both;
           transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
@@ -410,7 +415,7 @@ export default function BugTracker() {
         @keyframes spin { to { transform: rotate(360deg); } }
         .bt-spin { animation: spin 0.9s linear infinite; }
         @media (max-width: 560px) {
-          .bt-triage-panel { left: 12px !important; right: 12px !important; width: auto !important; top: 12px !important; }
+          .bt-triage-panel { left: 12px !important; right: 12px !important; width: auto !important; max-width: none !important; transform: none !important; top: 12px !important; }
         }
         @media (prefers-reduced-motion: reduce) {
           .bt-card { animation: none; }
@@ -418,6 +423,7 @@ export default function BugTracker() {
           .bt-glow { animation: none; }
           .bt-live-dot { animation: none; }
           .bt-spin { animation: none; }
+          .bt-triage-panel { animation: none; transform: translateX(-50%); }
         }
       `}</style>
 
@@ -504,15 +510,6 @@ export default function BugTracker() {
           </div>
         </div>
         <div style={styles.headerActions}>
-          <button
-            type="button"
-            className="bt-btn"
-            style={{ ...styles.secondaryBtn, borderStyle: "dashed", minWidth: 0 }}
-            onClick={seedTestTriage}
-            title="Temporary: adds fake unsorted bugs/suggestions to try the triage panel"
-          >
-            Add test triage items
-          </button>
           <button
             className="bt-btn"
             style={styles.secondaryBtn}
@@ -937,17 +934,22 @@ const styles = {
   },
   triagePanel: {
     position: "fixed",
-    top: 18,
-    right: 18,
-    width: 300,
-    maxHeight: "70vh",
+    top: 90,
+    left: "50%",
+    transform: "translateX(-50%)",
+    width: 380,
+    maxWidth: "calc(100vw - 32px)",
+    maxHeight: "min(60vh, 460px)",
     zIndex: 40,
     padding: 0,
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
-    border: "1px solid rgba(217,169,83,0.45)",
-    boxShadow: "0 8px 28px rgba(0,0,0,0.45)",
+    border: "1px solid rgba(217,169,83,0.5)",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.55), 0 0 0 1px rgba(217,169,83,0.08)",
+    background: "rgba(27,33,40,0.92)",
+    backdropFilter: "blur(10px)",
+    WebkitBackdropFilter: "blur(10px)",
   },
   triageHeader: {
     display: "flex",
@@ -1025,7 +1027,7 @@ const styles = {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    maxWidth: 170,
+    maxWidth: 250,
   },
   triageButtons: {
     display: "flex",
@@ -1103,6 +1105,13 @@ const styles = {
     fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   priorityPicker: { display: "flex", gap: 6 },
+  priorityHint: {
+    fontWeight: 400,
+    color: "#5c6772",
+    fontSize: 11.5,
+    textTransform: "none",
+    letterSpacing: 0,
+  },
   priorityChip: {
     display: "flex",
     alignItems: "center",
