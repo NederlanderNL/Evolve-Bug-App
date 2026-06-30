@@ -341,13 +341,6 @@ export default function BugTracker() {
     <div style={styles.page}>
       <style>{`
         @keyframes riseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes panelFloatIn {
-          from { opacity: 0; transform: translate(-50%, calc(-50% - 16px)) scale(0.96); }
-          to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        }
-        .bt-triage-panel {
-          animation: panelFloatIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
-        }
         .bt-card {
           animation: riseIn 0.25s ease both;
           transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
@@ -409,16 +402,12 @@ export default function BugTracker() {
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .bt-spin { animation: spin 0.9s linear infinite; }
-        @media (max-width: 560px) {
-          .bt-triage-panel { left: 12px !important; right: 12px !important; width: auto !important; max-width: none !important; transform: none !important; top: 12px !important; }
-        }
         @media (prefers-reduced-motion: reduce) {
           .bt-card { animation: none; }
           .bt-ember { animation: none; opacity: 0; }
           .bt-glow { animation: none; }
           .bt-live-dot { animation: none; }
           .bt-spin { animation: none; }
-          .bt-triage-panel { animation: none; transform: translate(-50%, -50%); }
         }
       `}</style>
 
@@ -446,7 +435,7 @@ export default function BugTracker() {
       )}
 
       {triageQueue.length > 0 && (
-        <div className="bt-card bt-triage-panel" style={styles.triagePanel}>
+        <div className="bt-card" style={styles.triagePanel}>
           <div style={styles.triageHeader}>
             <span style={styles.triageTitle}>
               Needs triage <span style={styles.triageCount}>{triageQueue.length}</span>
@@ -943,13 +932,15 @@ const styles = {
   },
   triagePanel: {
     position: "fixed",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    margin: "auto",
     width: 720,
-    height: "min(720px, calc(100vh - 80px))",
+    height: 720,
     maxWidth: "calc(100vw - 40px)",
-    maxHeight: "calc(100vh - 80px)",
+    maxHeight: "calc(100vh - 40px)",
     zIndex: 40,
     padding: 0,
     overflow: "hidden",
