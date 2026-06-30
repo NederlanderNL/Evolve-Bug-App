@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, Lock, Unlock } from "lucide-react";
+import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, Lock, Unlock, ThumbsUp, ThumbsDown } from "lucide-react";
 
 const PRIORITIES = [
   { id: "high", label: "High", icon: Flame, color: "#e0654a", bg: "rgba(224,101,74,0.12)", border: "rgba(224,101,74,0.4)" },
@@ -41,6 +41,41 @@ export default function BugTracker() {
   const [passInput, setPassInput] = useState("");
   const [passError, setPassError] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [myVotes, setMyVotes] = useState({}); // { [suggestionId]: "up" | "down" }
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("evolve-suggestion-votes");
+      if (stored) setMyVotes(JSON.parse(stored));
+    } catch (e) {
+      // ignore — voting will just not be remembered this session
+    }
+  }, []);
+
+  async function castVote(itemId, type) {
+    if (myVotes[itemId]) return; // already voted on this one from this browser
+    try {
+      const res = await fetch(`/api/suggestions/${itemId}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      if (!res.ok) throw new Error("failed");
+      const counts = await res.json();
+      setSuggestions((prev) =>
+        (prev || []).map((s) => (s.id === itemId ? { ...s, upvotes: counts.upvotes, downvotes: counts.downvotes } : s))
+      );
+      const nextVotes = { ...myVotes, [itemId]: type };
+      setMyVotes(nextVotes);
+      try {
+        localStorage.setItem("evolve-suggestion-votes", JSON.stringify(nextVotes));
+      } catch (e) {
+        // ignore
+      }
+    } catch (e) {
+      setError("Couldn't record your vote — try again.");
+    }
+  }
 
   const endpoint = view === "bugs" ? "/api/bugs" : "/api/suggestions";
   const items = view === "bugs" ? bugs : suggestions;
@@ -610,6 +645,36 @@ export default function BugTracker() {
                 <span style={styles.dot}>•</span>
                 <span>{new Date(item.reportedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
               </div>
+
+              {view === "suggestions" && (
+                <div style={styles.voteRow}>
+                  <button
+                    className="bt-icon-btn"
+                    disabled={!!myVotes[item.id]}
+                    onClick={() => castVote(item.id, "up")}
+                    style={{
+                      ...styles.voteBtn,
+                      ...(myVotes[item.id] === "up" ? styles.voteBtnActiveUp : {}),
+                      cursor: myVotes[item.id] ? "default" : "pointer",
+                    }}
+                  >
+                    <ThumbsUp size={14} /> {item.upvotes || 0}
+                  </button>
+                  <button
+                    className="bt-icon-btn"
+                    disabled={!!myVotes[item.id]}
+                    onClick={() => castVote(item.id, "down")}
+                    style={{
+                      ...styles.voteBtn,
+                      ...(myVotes[item.id] === "down" ? styles.voteBtnActiveDown : {}),
+                      cursor: myVotes[item.id] ? "default" : "pointer",
+                    }}
+                  >
+                    <ThumbsDown size={14} /> {item.downvotes || 0}
+                  </button>
+                  {myVotes[item.id] && <span style={styles.voteThanks}>Thanks for voting</span>}
+                </div>
+              )}
               {unlocked && (
               <div style={styles.cardActions}>
                 {item.status === "open" && (
@@ -972,6 +1037,41 @@ const styles = {
   },
   dot: { opacity: 0.5 },
   cardActions: { display: "flex", gap: 10 },
+  voteRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  voteBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    background: "transparent",
+    border: "1px solid #344049",
+    borderRadius: 6,
+    padding: "6px 10px",
+    fontSize: 12.5,
+    color: "#8b97a1",
+    fontFamily: "system-ui, sans-serif",
+    fontWeight: 600,
+  },
+  voteBtnActiveUp: {
+    color: "#5fd4e8",
+    borderColor: "rgba(63,182,201,0.5)",
+    background: "rgba(63,182,201,0.1)",
+  },
+  voteBtnActiveDown: {
+    color: "#e0654a",
+    borderColor: "rgba(224,101,74,0.5)",
+    background: "rgba(224,101,74,0.1)",
+  },
+  voteThanks: {
+    fontSize: 11.5,
+    color: "#5c6772",
+    fontFamily: "system-ui, sans-serif",
+    fontStyle: "italic",
+  },
   actionBtn: {
     display: "flex",
     alignItems: "center",
