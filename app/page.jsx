@@ -29,6 +29,7 @@ export default function BugTracker() {
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState("open");
+  const [sortBy, setSortBy] = useState("priority"); // "priority" | "date"
   const [form, setForm] = useState({ title: "", description: "", reporter: "", priority: "medium" });
   const [noteFormOpenFor, setNoteFormOpenFor] = useState(null);
   const [noteDraft, setNoteDraft] = useState({ author: "", content: "" });
@@ -204,7 +205,12 @@ export default function BugTracker() {
   const order = { high: 0, medium: 1, low: 2 };
   const visible = bugs
     .filter((b) => (filter === "all" ? true : b.status === filter))
-    .sort((a, b) => order[a.priority] - order[b.priority] || new Date(b.reportedAt) - new Date(a.reportedAt));
+    .sort((a, b) => {
+      if (sortBy === "date") {
+        return new Date(b.reportedAt) - new Date(a.reportedAt);
+      }
+      return order[a.priority] - order[b.priority] || new Date(b.reportedAt) - new Date(a.reportedAt);
+    });
 
   const counts = {
     open: bugs.filter((b) => b.status === "open").length,
@@ -370,26 +376,48 @@ export default function BugTracker() {
         </div>
       )}
 
-      <div style={styles.tabs}>
-        {[
-          { id: "open", label: `Open (${counts.open})` },
-          { id: "in-progress", label: `In progress (${counts.inProgress})` },
-          { id: "fixed", label: `Fixed (${counts.fixed})` },
-          { id: "all", label: `All (${counts.all})` },
-        ].map((t) => (
-          <button
-            key={t.id}
-            className="bt-tab"
-            onClick={() => setFilter(t.id)}
-            style={{
-              ...styles.tab,
-              color: filter === t.id ? "#1a1712" : "#7c8a96",
-              background: filter === t.id ? "linear-gradient(180deg, #e9c876 0%, #c9a153 100%)" : "transparent",
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div style={styles.controlsRow}>
+        <div style={styles.tabs}>
+          {[
+            { id: "open", label: `Open (${counts.open})` },
+            { id: "in-progress", label: `In progress (${counts.inProgress})` },
+            { id: "fixed", label: `Fixed (${counts.fixed})` },
+            { id: "all", label: `All (${counts.all})` },
+          ].map((t) => (
+            <button
+              key={t.id}
+              className="bt-tab"
+              onClick={() => setFilter(t.id)}
+              style={{
+                ...styles.tab,
+                color: filter === t.id ? "#1a1712" : "#7c8a96",
+                background: filter === t.id ? "linear-gradient(180deg, #e9c876 0%, #c9a153 100%)" : "transparent",
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={styles.sortTabs}>
+          {[
+            { id: "priority", label: "Priority" },
+            { id: "date", label: "Newest" },
+          ].map((s) => (
+            <button
+              key={s.id}
+              className="bt-tab"
+              onClick={() => setSortBy(s.id)}
+              style={{
+                ...styles.sortTab,
+                color: sortBy === s.id ? "#1a1712" : "#7c8a96",
+                background: sortBy === s.id ? "linear-gradient(180deg, #5fd4e8 0%, #3fb6c9 100%)" : "transparent",
+              }}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && <div style={styles.errorBanner}>{error}</div>}
@@ -790,9 +818,16 @@ const styles = {
     cursor: "pointer",
     fontFamily: "system-ui, sans-serif",
   },
-  tabs: {
+  controlsRow: {
     maxWidth: 760,
     margin: "0 auto 18px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  tabs: {
     display: "flex",
     gap: 6,
     background: "#1b2128",
@@ -806,6 +841,24 @@ const styles = {
     borderRadius: 5,
     padding: "7px 14px",
     fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "system-ui, sans-serif",
+  },
+  sortTabs: {
+    display: "flex",
+    gap: 6,
+    background: "#1b2128",
+    border: "1px solid #344049",
+    borderRadius: 8,
+    padding: 4,
+    width: "fit-content",
+  },
+  sortTab: {
+    border: "none",
+    borderRadius: 5,
+    padding: "7px 14px",
+    fontSize: 12.5,
     fontWeight: 600,
     cursor: "pointer",
     fontFamily: "system-ui, sans-serif",
