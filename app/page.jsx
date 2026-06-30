@@ -38,6 +38,7 @@ export default function BugTracker() {
   const [myVotes, setMyVotes] = useState({}); // { [suggestionId]: "up" | "down" }
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
+  const [triageCollapsed, setTriageCollapsed] = useState(false);
 
   useEffect(() => {
     try {
@@ -222,6 +223,27 @@ export default function BugTracker() {
     }
   }
 
+  // Used by the triage panel, which can show items from both Bugs and
+  // Suggestions at once regardless of which tab is currently active — so
+  // it needs its own endpoint/state handling rather than relying on
+  // `endpoint`/`refreshItems`, which only know about the active view.
+  async function setTriagePriority(type, id, priority) {
+    const apiEndpoint = type === "bugs" ? "/api/bugs" : "/api/suggestions";
+    const setter = type === "bugs" ? setBugs : setSuggestions;
+    try {
+      const res = await fetch(`${apiEndpoint}/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority }),
+      });
+      if (!res.ok) throw new Error("failed");
+      setter((prev) => (prev || []).map((it) => (it.id === id ? { ...it, priority } : it)));
+      setError(null);
+    } catch (e) {
+      setError("Couldn't set that priority — try again.");
+    }
+  }
+
   async function removeItem(id) {
     try {
       const res = await fetch(`${endpoint}/${id}`, {
@@ -281,7 +303,12 @@ export default function BugTracker() {
     );
   }
 
-  const order = { high: 0, medium: 1, low: 2 };
+  const order = { unsorted: -1, high: 0, medium: 1, low: 2 };
+  const triageQueue = [
+    ...(bugs || []).filter((b) => b.priority === "unsorted").map((b) => ({ ...b, itemType: "bugs" })),
+    ...(suggestions || []).filter((s) => s.priority === "unsorted").map((s) => ({ ...s, itemType: "suggestions" })),
+  ].sort((a, b) => new Date(a.reportedAt) - new Date(b.reportedAt));
+
   const visible = items
     .filter((b) => (filter === "all" ? true : b.status === filter))
     .sort((a, b) => {
@@ -366,6 +393,9 @@ export default function BugTracker() {
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .bt-spin { animation: spin 0.9s linear infinite; }
+        @media (max-width: 560px) {
+          .bt-triage-panel { left: 12px !important; right: 12px !important; width: auto !important; top: 12px !important; }
+        }
         @media (prefers-reduced-motion: reduce) {
           .bt-card { animation: none; }
           .bt-ember { animation: none; opacity: 0; }
@@ -393,6 +423,58 @@ export default function BugTracker() {
           />
         ))}
       </div>
+
+      {triageQueue.length > 0 && (
+        <div className="bt-card bt-triage-panel" style={styles.triagePanel}>
+          <div style={styles.triageHeader}>
+            <span style={styles.triageTitle}>
+              Needs triage <span style={styles.triageCount}>{triageQueue.length}</span>
+            </span>
+            <button
+              type="button"
+              className="bt-icon-btn"
+              style={styles.triageCollapseBtn}
+              onClick={() => setTriageCollapsed((c) => !c)}
+            >
+              {triageCollapsed ? "Show" : "Hide"}
+            </button>
+          </div>
+          {!triageCollapsed && (
+            <div style={styles.triageList}>
+              {triageQueue.map((entry) => (
+                <div key={`${entry.itemType}-${entry.id}`} style={styles.triageRow}>
+                  <div style={styles.triageRowText}>
+                    <span style={styles.triageTypeTag}>{entry.itemType === "bugs" ? "Bug" : "Suggestion"}</span>
+                    <span style={styles.triageRowTitle}>{entry.title}</span>
+                  </div>
+                  <div style={styles.triageButtons}>
+                    {PRIORITIES.map((p) => {
+                      const Icon = p.icon;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="bt-icon-btn"
+                          title={`Set ${p.label} priority`}
+                          onClick={() => setTriagePriority(entry.itemType, entry.id, p.id)}
+                          style={{
+                            ...styles.triageBtn,
+                            color: p.color,
+                            borderColor: p.border,
+                            background: p.bg,
+                          }}
+                        >
+                          <Icon size={13} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="bt-content">
       <header style={styles.header}>
@@ -590,6 +672,7 @@ export default function BugTracker() {
           </div>
         )}
         {visible.map((item) => {
+          const isUnsorted = item.priority === "unsorted";
           const p = PRIORITIES.find((x) => x.id === item.priority) || PRIORITIES[1];
           const Icon = p.icon;
           const fixed = item.status === "fixed";
@@ -600,14 +683,20 @@ export default function BugTracker() {
               className="bt-card"
               style={{
                 ...styles.card,
-                borderLeft: `3px solid ${p.color}`,
+                borderLeft: `3px solid ${isUnsorted ? "#7c8a96" : p.color}`,
                 opacity: fixed ? 0.6 : 1,
               }}
             >
               <div style={styles.cardTop}>
-                <span style={{ ...styles.priorityTag, color: p.color, background: p.bg, borderColor: p.border }}>
-                  <Icon size={13} /> {p.label}
-                </span>
+                {isUnsorted ? (
+                  <span style={{ ...styles.priorityTag, color: "#8b97a1", background: "rgba(139,151,161,0.12)", borderColor: "rgba(139,151,161,0.4)" }}>
+                    Needs triage
+                  </span>
+                ) : (
+                  <span style={{ ...styles.priorityTag, color: p.color, background: p.bg, borderColor: p.border }}>
+                    <Icon size={13} /> {p.label}
+                  </span>
+                )}
                 {inProgress && (
                   <span style={{ ...styles.priorityTag, color: "#3fb6c9", background: "rgba(63,182,201,0.12)", borderColor: "rgba(63,182,201,0.4)" }}>
                     In progress
@@ -820,6 +909,113 @@ const styles = {
     padding: "10px 14px",
     fontSize: 13,
     fontFamily: "var(--font-body), system-ui, sans-serif",
+  },
+  triagePanel: {
+    position: "fixed",
+    top: 18,
+    right: 18,
+    width: 300,
+    maxHeight: "70vh",
+    zIndex: 40,
+    padding: 0,
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+    border: "1px solid rgba(217,169,83,0.45)",
+    boxShadow: "0 8px 28px rgba(0,0,0,0.45)",
+  },
+  triageHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "12px 14px",
+    borderBottom: "1px solid #28313a",
+    background: "rgba(217,169,83,0.06)",
+  },
+  triageTitle: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#e9c876",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  triageCount: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 18,
+    height: 18,
+    padding: "0 5px",
+    borderRadius: 9,
+    background: "#e0654a",
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: 700,
+  },
+  triageCollapseBtn: {
+    padding: "3px 9px",
+    fontSize: 11.5,
+    border: "1px solid #344049",
+    color: "#8b97a1",
+    background: "transparent",
+    borderRadius: 5,
+    cursor: "pointer",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+  },
+  triageList: {
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+  },
+  triageRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    padding: "10px 14px",
+    borderBottom: "1px solid #232a32",
+  },
+  triageRowText: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 3,
+    minWidth: 0,
+  },
+  triageTypeTag: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#7c8a96",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+  },
+  triageRowTitle: {
+    fontSize: 13,
+    color: "#e6e9ec",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    maxWidth: 170,
+  },
+  triageButtons: {
+    display: "flex",
+    gap: 4,
+    flexShrink: 0,
+  },
+  triageBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 26,
+    height: 26,
+    borderRadius: 5,
+    border: "1px solid",
+    cursor: "pointer",
   },
   primaryBtn: {
     display: "flex",
