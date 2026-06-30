@@ -53,19 +53,22 @@ export default function BugTracker() {
   }, []);
 
   async function castVote(itemId, type) {
-    if (myVotes[itemId]) return; // already voted on this one from this browser
+    const previousType = myVotes[itemId] || null;
+    const nextType = previousType === type ? null : type; // clicking your current vote again retracts it
     try {
       const res = await fetch(`/api/suggestions/${itemId}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type: nextType, previousType }),
       });
       if (!res.ok) throw new Error("failed");
       const counts = await res.json();
       setSuggestions((prev) =>
         (prev || []).map((s) => (s.id === itemId ? { ...s, upvotes: counts.upvotes, downvotes: counts.downvotes } : s))
       );
-      const nextVotes = { ...myVotes, [itemId]: type };
+      const nextVotes = { ...myVotes };
+      if (nextType) nextVotes[itemId] = nextType;
+      else delete nextVotes[itemId];
       setMyVotes(nextVotes);
       try {
         localStorage.setItem("evolve-suggestion-votes", JSON.stringify(nextVotes));
@@ -650,29 +653,31 @@ export default function BugTracker() {
                 <div style={styles.voteRow}>
                   <button
                     className="bt-icon-btn"
-                    disabled={!!myVotes[item.id]}
                     onClick={() => castVote(item.id, "up")}
+                    title={myVotes[item.id] === "up" ? "Click to retract your vote" : "Vote this suggestion up"}
                     style={{
                       ...styles.voteBtn,
                       ...(myVotes[item.id] === "up" ? styles.voteBtnActiveUp : {}),
-                      cursor: myVotes[item.id] ? "default" : "pointer",
                     }}
                   >
                     <ThumbsUp size={14} /> {item.upvotes || 0}
                   </button>
                   <button
                     className="bt-icon-btn"
-                    disabled={!!myVotes[item.id]}
                     onClick={() => castVote(item.id, "down")}
+                    title={myVotes[item.id] === "down" ? "Click to retract your vote" : "Vote this suggestion down"}
                     style={{
                       ...styles.voteBtn,
                       ...(myVotes[item.id] === "down" ? styles.voteBtnActiveDown : {}),
-                      cursor: myVotes[item.id] ? "default" : "pointer",
                     }}
                   >
                     <ThumbsDown size={14} /> {item.downvotes || 0}
                   </button>
-                  {myVotes[item.id] && <span style={styles.voteThanks}>Thanks for voting</span>}
+                  {myVotes[item.id] && (
+                    <span style={styles.voteThanks}>
+                      You voted {myVotes[item.id] === "up" ? "up" : "down"} — click again to change
+                    </span>
+                  )}
                 </div>
               )}
               {unlocked && (
@@ -1055,6 +1060,7 @@ const styles = {
     color: "#8b97a1",
     fontFamily: "system-ui, sans-serif",
     fontWeight: 600,
+    cursor: "pointer",
   },
   voteBtnActiveUp: {
     color: "#5fd4e8",
