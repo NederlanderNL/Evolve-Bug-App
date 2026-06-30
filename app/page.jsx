@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, ThumbsUp, ThumbsDown } from "lucide-react";
+import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, ThumbsUp, ThumbsDown, RefreshCw } from "lucide-react";
 
 const PRIORITIES = [
   { id: "high", label: "High", icon: Flame, color: "#e0654a", bg: "rgba(224,101,74,0.12)", border: "rgba(224,101,74,0.4)" },
@@ -36,6 +36,8 @@ export default function BugTracker() {
   const [noteFormOpenFor, setNoteFormOpenFor] = useState(null);
   const [noteDraft, setNoteDraft] = useState({ author: "", content: "" });
   const [myVotes, setMyVotes] = useState({}); // { [suggestionId]: "up" | "down" }
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
 
   useEffect(() => {
     try {
@@ -160,6 +162,31 @@ export default function BugTracker() {
     }
   }
 
+  async function syncFromDiscord() {
+    if (syncing) return;
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const res = await fetch("/api/discord-sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setSyncMessage(data.error || "Discord sync failed — check your bot setup.");
+        return;
+      }
+      const parts = [];
+      parts.push(`Imported ${data.imported} new bug${data.imported === 1 ? "" : "s"}`);
+      if (data.skippedDuplicate) parts.push(`skipped ${data.skippedDuplicate} likely duplicate${data.skippedDuplicate === 1 ? "" : "s"}`);
+      setSyncMessage(parts.join(", ") + ".");
+      if (data.imported > 0 && view === "bugs") {
+        await refreshItems();
+      }
+    } catch (e) {
+      setSyncMessage("Couldn't reach the sync endpoint — try again.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function addItem() {
     if (!form.title.trim()) return;
     try {
@@ -273,7 +300,17 @@ export default function BugTracker() {
     <div style={styles.page}>
       <style>{`
         @keyframes riseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .bt-card { animation: riseIn 0.25s ease both; }
+        .bt-card {
+          animation: riseIn 0.25s ease both;
+          transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .bt-card:hover { border-color: #3a4550; }
+        .bt-btn, .bt-input, .bt-tab, .bt-icon-btn, select.bt-input {
+          transition: filter 0.12s ease, border-color 0.12s ease, opacity 0.12s ease, transform 0.08s ease;
+        }
+        .bt-btn:hover, .bt-icon-btn:hover { filter: brightness(1.12); }
+        .bt-btn:active, .bt-icon-btn:active { transform: translateY(1px); }
+        .bt-input:hover { border-color: #455260; }
         .bt-btn:focus-visible, .bt-input:focus-visible, .bt-tab:focus-visible, .bt-icon-btn:focus-visible {
           outline: 2px solid #c9a13b; outline-offset: 2px;
         }
@@ -322,11 +359,14 @@ export default function BugTracker() {
           margin-right: 6px;
           animation: liveDot 2s ease-in-out infinite;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .bt-spin { animation: spin 0.9s linear infinite; }
         @media (prefers-reduced-motion: reduce) {
           .bt-card { animation: none; }
           .bt-ember { animation: none; opacity: 0; }
           .bt-glow { animation: none; }
           .bt-live-dot { animation: none; }
+          .bt-spin { animation: none; }
         }
       `}</style>
 
@@ -361,6 +401,17 @@ export default function BugTracker() {
           </div>
         </div>
         <div style={styles.headerActions}>
+          {view === "bugs" && (
+            <button
+              className="bt-btn"
+              style={styles.secondaryBtn}
+              onClick={syncFromDiscord}
+              disabled={syncing}
+            >
+              <RefreshCw size={15} className={syncing ? "bt-spin" : ""} />
+              {syncing ? "Syncing…" : "Sync from Discord"}
+            </button>
+          )}
           <button
             className="bt-btn"
             style={styles.primaryBtn}
@@ -371,6 +422,8 @@ export default function BugTracker() {
           </button>
         </div>
       </header>
+
+      {syncMessage && <div style={styles.syncBanner}>{syncMessage}</div>}
 
       <div style={styles.viewSwitch}>
         {["bugs", "suggestions"].map((v) => (
@@ -519,13 +572,16 @@ export default function BugTracker() {
       <div style={styles.list}>
         {visible.length === 0 && (
           <div style={styles.empty}>
-            {filter === "open"
-              ? LABELS.emptyOpen
-              : filter === "in-progress"
-              ? LABELS.emptyInProgress
-              : filter === "fixed"
-              ? LABELS.emptyFixed
-              : LABELS.emptyAll}
+            <CircleDot size={22} style={{ opacity: 0.35, marginBottom: 8 }} />
+            <div>
+              {filter === "open"
+                ? LABELS.emptyOpen
+                : filter === "in-progress"
+                ? LABELS.emptyInProgress
+                : filter === "fixed"
+                ? LABELS.emptyFixed
+                : LABELS.emptyAll}
+            </div>
           </div>
         )}
         {visible.map((item) => {
@@ -689,7 +745,7 @@ const styles = {
     minHeight: "100vh",
     background: "radial-gradient(ellipse at 50% 0%, #232c36 0%, #161b21 55%, #10141a 100%)",
     color: "#e6e9ec",
-    fontFamily: "'Cinzel', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif",
+    fontFamily: "var(--font-display), Georgia, serif",
     padding: "32px 20px 60px",
     boxSizing: "border-box",
     position: "relative",
@@ -699,6 +755,8 @@ const styles = {
   header: {
     maxWidth: 760,
     margin: "0 auto 24px",
+    paddingBottom: 20,
+    borderBottom: "1px solid rgba(217,169,83,0.15)",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
@@ -721,16 +779,41 @@ const styles = {
   },
   title: { margin: 0, fontSize: 25, fontWeight: 700, letterSpacing: 0.5, color: "#e9c876", textTransform: "uppercase" },
   titleAccent: { color: "#cdd5db", fontWeight: 500, fontSize: 18, textTransform: "none", letterSpacing: 0.2 },
-  subtitle: { margin: "4px 0 0", fontSize: 13.5, color: "#7c8a96", fontFamily: "system-ui, sans-serif" },
+  subtitle: { margin: "4px 0 0", fontSize: 13.5, color: "#7c8a96", fontFamily: "var(--font-body), system-ui, sans-serif" },
   liveTag: {
     display: "flex",
     alignItems: "center",
     marginTop: 4,
     fontSize: 12,
     color: "#7c8a96",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   headerActions: { display: "flex", alignItems: "center", gap: 10 },
+  secondaryBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    background: "transparent",
+    color: "#cdd5db",
+    border: "1px solid #344049",
+    borderRadius: 6,
+    padding: "10px 16px",
+    fontWeight: 600,
+    fontSize: 14,
+    cursor: "pointer",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+  },
+  syncBanner: {
+    maxWidth: 760,
+    margin: "0 auto 16px",
+    background: "rgba(63,182,201,0.1)",
+    border: "1px solid rgba(63,182,201,0.35)",
+    color: "#5fd4e8",
+    borderRadius: 6,
+    padding: "10px 14px",
+    fontSize: 13,
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+  },
   primaryBtn: {
     display: "flex",
     alignItems: "center",
@@ -741,9 +824,11 @@ const styles = {
     borderRadius: 6,
     padding: "10px 16px",
     fontWeight: 700,
-    fontSize: 14,
+    fontSize: 13.5,
+    letterSpacing: 0.2,
     cursor: "pointer",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.25)",
   },
   errorBanner: {
     maxWidth: 760,
@@ -754,7 +839,7 @@ const styles = {
     borderRadius: 6,
     padding: "10px 14px",
     fontSize: 13,
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   form: {
     maxWidth: 760,
@@ -766,6 +851,7 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 14,
+    boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
   },
   formRow: { display: "flex" },
   formRow2: { display: "flex", gap: 16, flexWrap: "wrap" },
@@ -775,7 +861,7 @@ const styles = {
     gap: 6,
     fontSize: 12.5,
     color: "#8b97a1",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
     flex: 1,
     minWidth: 200,
   },
@@ -786,7 +872,7 @@ const styles = {
     padding: "9px 11px",
     color: "#e6e9ec",
     fontSize: 14,
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   priorityPicker: { display: "flex", gap: 6 },
   priorityChip: {
@@ -797,7 +883,7 @@ const styles = {
     borderRadius: 6,
     padding: "8px 10px",
     fontSize: 12.5,
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
     cursor: "pointer",
     fontWeight: 600,
   },
@@ -823,7 +909,7 @@ const styles = {
     fontSize: 13.5,
     fontWeight: 700,
     cursor: "pointer",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   controlsRow: {
     maxWidth: 760,
@@ -850,7 +936,7 @@ const styles = {
     fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   sortTabs: {
     display: "flex",
@@ -868,21 +954,25 @@ const styles = {
     fontSize: 12.5,
     fontWeight: 600,
     cursor: "pointer",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   list: { maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 },
   empty: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
     textAlign: "center",
     color: "#5c6772",
     fontSize: 14,
-    padding: "40px 20px",
-    fontFamily: "system-ui, sans-serif",
+    padding: "48px 20px",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   card: {
     background: "#1b2128",
-    borderRadius: 8,
+    borderRadius: 9,
     padding: "16px 18px",
     border: "1px solid #28313a",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.25), 0 1px 1px rgba(0,0,0,0.15)",
   },
   cardTop: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 },
   priorityTag: {
@@ -894,19 +984,19 @@ const styles = {
     padding: "3px 8px",
     borderRadius: 4,
     border: "1px solid",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   cardTitle: { margin: 0, fontSize: 17, color: "#e9c876", fontWeight: 600 },
-  cardDesc: { margin: "0 0 10px", fontSize: 13.5, color: "#aab5bd", lineHeight: 1.5, fontFamily: "system-ui, sans-serif" },
+  cardDesc: { margin: "0 0 10px", fontSize: 13.5, color: "#aab5bd", lineHeight: 1.5, fontFamily: "var(--font-body), system-ui, sans-serif" },
   cardMeta: {
     display: "flex",
     alignItems: "center",
     gap: 8,
     fontSize: 12.5,
     color: "#5c6772",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
     marginBottom: 10,
   },
   dot: { opacity: 0.5 },
@@ -927,7 +1017,7 @@ const styles = {
     padding: "6px 10px",
     fontSize: 12.5,
     color: "#8b97a1",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
     fontWeight: 600,
     cursor: "pointer",
   },
@@ -944,7 +1034,7 @@ const styles = {
   voteThanks: {
     fontSize: 11.5,
     color: "#5c6772",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
     fontStyle: "italic",
   },
   actionBtn: {
@@ -958,7 +1048,7 @@ const styles = {
     fontSize: 12.5,
     color: "#8b97a1",
     cursor: "pointer",
-    fontFamily: "system-ui, sans-serif",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   noteForm: {
     marginTop: 12,
