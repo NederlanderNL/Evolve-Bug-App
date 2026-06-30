@@ -417,7 +417,7 @@ export default function BugTracker() {
           </button>
           <button
             className="bt-btn"
-            style={styles.primaryBtn}
+            style={{ ...styles.primaryBtn, minWidth: 190, justifyContent: "center" }}
             onClick={() => setShowForm((s) => !s)}
           >
             {showForm ? <X size={16} /> : <Plus size={16} />}
