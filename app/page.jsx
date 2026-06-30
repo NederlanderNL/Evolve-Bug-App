@@ -286,6 +286,9 @@ export default function BugTracker() {
       if (sortBy === "date") {
         return new Date(b.reportedAt) - new Date(a.reportedAt);
       }
+      if (sortBy === "oldest") {
+        return new Date(a.reportedAt) - new Date(b.reportedAt);
+      }
       return order[a.priority] - order[b.priority] || new Date(b.reportedAt) - new Date(a.reportedAt);
     });
 
@@ -474,6 +477,7 @@ export default function BugTracker() {
           {[
             { id: "priority", label: "Priority" },
             { id: "date", label: "Newest" },
+            { id: "oldest", label: "Oldest" },
           ].map((s) => (
             <button
               key={s.id}
