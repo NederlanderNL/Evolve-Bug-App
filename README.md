@@ -1,93 +1,124 @@
 # Evolve Report Board — standalone version
 
-This is a standalone version of your bug tracker. It runs as a normal website
-(no Claude required), stores data in a real database, and your whole team can
-use it at once from any browser.
+A standalone bug & suggestion tracker for your staff team. No Claude
+required — it's a real website with its own database, Discord login, and
+role-based permissions.
 
-It keeps everything the Claude artifact version had: priority sorting, status
-tracking (Open / In progress / Fixed), per-bug and per-suggestion dev notes,
-the passcode-gated editing, and the animated background. It still polls for
-updates every 4 seconds so everyone sees changes without refreshing.
+Features: priority sorting, status tracking (Open / In progress / Fixed),
+per-bug and per-suggestion dev notes, suggestion voting (thumbs up/down,
+switchable), the animated background, and now — Discord sign-in with five
+staff roles (Helper, Community Manager, Moderator, Admin, Owner).
 
-## Preview it first (no setup required)
+## Permissions
 
-You can run this on your own computer and try it out before doing anything
-with GitHub, Vercel, or Turso. It automatically uses a local file as its
-database if it doesn't find Turso credentials, so there's nothing to
-configure.
+- **Signing in** requires a Discord account. Anyone can sign in; they start
+  as **Helper** by default.
+- **Adding/editing bugs & suggestions** (status changes, dev notes, delete)
+  is restricted to **Community Manager, Admin, and Owner**.
+- **Voting on suggestions** is open to everyone signed in, all 5 roles.
+- **Assigning roles** can only be done by an **Owner**, from the "Manage
+  Roles" tab (only Owners see this tab). The first Owner(s) are set via an
+  environment variable (see below) — after that, Owners can promote/demote
+  anyone from the Roles tab.
+
+## What you need (all free)
+
+1. A [Discord Developer](https://discord.com/developers/applications)
+   account — to create the login app.
+2. A [GitHub](https://github.com) account, to hold the code.
+3. A [Vercel](https://vercel.com) account, to host the site.
+4. A [Turso](https://turso.tech) account, for the database.
+
+## 1. Create a Discord OAuth app
+
+1. Go to <https://discord.com/developers/applications> and click
+   **New Application**. Name it something like "Evolve Report Board".
+2. In the left sidebar, click **OAuth2**. Copy the **Client ID** and
+   **Client Secret** — you'll need both shortly.
+3. Still on the OAuth2 page, under **Redirects**, add:
+   - `http://localhost:3000/api/auth/callback/discord` (for local preview)
+   - `https://YOUR-VERCEL-DOMAIN.vercel.app/api/auth/callback/discord`
+     (you can add this once you know your Vercel URL — see step 4)
+
+## 2. Find your Discord user ID (to become the first Owner)
+
+1. In Discord, go to **Settings → Advanced** and turn on **Developer Mode**.
+2. Right-click your own profile picture/name anywhere in Discord and choose
+   **Copy User ID**. That's a long number — save it.
+3. You'll put this in the `OWNER_DISCORD_IDS` environment variable below.
+   You can list multiple people's IDs separated by commas if more than one
+   person should start as Owner.
+
+## 3. Preview it locally (optional, but recommended)
+
+Even local preview needs real Discord credentials now, since login goes
+through Discord's servers. It still uses a local file as the database
+automatically (no Turso needed yet).
 
 ```bash
 npm install
+cp .env.example .env.local
+```
+
+Edit `.env.local` and fill in:
+- `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` (from step 1)
+- `NEXTAUTH_SECRET` — generate one with `openssl rand -base64 32`, or any
+  long random string
+- `OWNER_DISCORD_IDS` — your Discord user ID from step 2
+
+Leave `TURSO_DATABASE_URL` blank for local preview. Then:
+
+```bash
 npm run dev
 ```
 
-Then open `http://localhost:3000` in your browser. Click "Unlock to edit"
-and use the passcode `EvolveBugReporter` (or whatever you set in
-`.env.local` — see below) to try adding bugs, suggestions, and notes.
+Open `http://localhost:3000`, click "Sign in with Discord," and you should
+land back on the board as an Owner (since your ID is in
+`OWNER_DISCORD_IDS`). Try adding a bug, a suggestion, voting, and check the
+"Manage Roles" tab.
 
-This local mode is just for previewing — the data only lives on your machine
-and won't be shared with your team. Once you're happy with it, follow the
-deployment steps below to put it on a real shared URL.
+## 4. Create the production database
 
-(If you want to set a custom passcode even for local preview, copy
-`.env.example` to `.env.local` and set `EDIT_PASSCODE` there before running
-`npm run dev`.)
+1. Sign up at [turso.tech](https://turso.tech), create a database (e.g.
+   `evolve-bugs`).
+2. From the dashboard grab the **Database URL** (`libsql://...`) and an
+   **Auth Token**.
 
-## What you need to deploy for real (all free)
-
-1. A [GitHub](https://github.com) account, to hold the code.
-2. A [Vercel](https://vercel.com) account, to host the site (sign up with
-   your GitHub account, it's one click).
-3. A [Turso](https://turso.tech) account, for the database (SQLite-compatible,
-   free tier is plenty for this).
-
-## 1. Create the database
-
-1. Sign up at [turso.tech](https://turso.tech) and install their CLI, or just
-   use their web dashboard (Settings → Database → Create Database).
-2. Create a new database, name it something like `evolve-bugs`.
-3. From the dashboard, grab two values:
-   - **Database URL** (starts with `libsql://...`)
-   - **Auth Token** (click "Create Token")
-
-You don't need to create any tables yourself — the app creates the `bugs`
-table automatically the first time it runs.
-
-## 2. Push this code to GitHub
-
-From this folder:
+## 5. Push this code to GitHub
 
 ```bash
 git init
 git add .
 git commit -m "Evolve report board"
+git branch -M main
+git remote add origin https://github.com/YOUR-USERNAME/evolve-bug-tracker.git
+git push -u origin main
 ```
 
-Then create a new empty repository on GitHub and follow the push instructions
-it gives you (`git remote add origin ...`, `git push -u origin main`).
+## 6. Deploy to Vercel
 
-## 3. Deploy to Vercel
-
-1. Go to [vercel.com/new](https://vercel.com/new) and import the GitHub repo
-   you just created.
-2. Before deploying, open the **Environment Variables** section and add:
+1. Go to [vercel.com/new](https://vercel.com/new), import the repo.
+2. Before deploying, add these **Environment Variables**:
 
    | Name | Value |
    |---|---|
-   | `TURSO_DATABASE_URL` | the `libsql://...` URL from Turso |
-   | `TURSO_AUTH_TOKEN` | the auth token from Turso |
-   | `EDIT_PASSCODE` | whatever passcode your editor should use (e.g. `EvolveBugReporter`) |
+   | `TURSO_DATABASE_URL` | from step 4 |
+   | `TURSO_AUTH_TOKEN` | from step 4 |
+   | `DISCORD_CLIENT_ID` | from step 1 |
+   | `DISCORD_CLIENT_SECRET` | from step 1 |
+   | `NEXTAUTH_SECRET` | same random string as local, or a new one |
+   | `OWNER_DISCORD_IDS` | your Discord user ID(s) from step 2 |
 
-3. Click **Deploy**. After a minute or two, Vercel gives you a live URL like
-   `evolve-bug-tracker.vercel.app` — that's your standalone site.
+3. Click **Deploy**. Once it's live, copy the URL Vercel gives you (e.g.
+   `evolve-bug-tracker.vercel.app`).
+4. Go back to your Discord app's OAuth2 page and add a second redirect URL:
+   `https://evolve-bug-tracker.vercel.app/api/auth/callback/discord`
+   (using your actual domain).
 
-That's it. Send that URL to your team. No Claude account, no published
-artifact link, no download — just a website.
+That's it — share the Vercel URL with your team. Anyone can sign in and
+view; only Community Manager+ can edit; only Owners can manage roles.
 
 ## Updating it later
-
-Whenever you want to change anything (colors, new features, etc.), just edit
-the files and push to GitHub again:
 
 ```bash
 git add .
@@ -95,16 +126,18 @@ git commit -m "describe your change"
 git push
 ```
 
-Vercel automatically redeploys on every push.
+Vercel redeploys automatically on every push.
 
-## Notes on the passcode system
+## Promoting/demoting staff
 
-Unlike the Claude artifact version, the passcode is now actually enforced on
-the server — every add/edit/delete request is checked against
-`EDIT_PASSCODE` before it's allowed to touch the database. Viewing the board
-never requires a passcode; only mutating it does.
+Sign in as an Owner, open the **Manage Roles** tab, and pick a new role
+from the dropdown next to each person's name. Changes take effect within a
+few seconds (no need for them to sign out).
 
-If you ever want to rotate the passcode, just change the `EDIT_PASSCODE`
-environment variable in your Vercel project settings and redeploy (Vercel
-redeploys automatically when you save env var changes, or you can trigger a
-manual redeploy from the dashboard).
+## A note on security
+
+Roles are stored server-side and checked on every request — a person can't
+fake a higher role by editing anything in their browser. The only "soft
+spot" is the very first Owner(s): whoever controls `OWNER_DISCORD_IDS` in
+your Vercel project settings can always make themselves (or anyone) an
+Owner, so treat access to your Vercel project and Discord app as sensitive.

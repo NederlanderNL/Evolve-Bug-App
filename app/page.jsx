@@ -1,13 +1,23 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, Lock, Unlock, ThumbsUp, ThumbsDown } from "lucide-react";
+import { useSession, signIn, signOut } from "next-auth/react";
+import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, ThumbsUp, ThumbsDown, LogOut, ShieldCheck } from "lucide-react";
 
 const PRIORITIES = [
   { id: "high", label: "High", icon: Flame, color: "#e0654a", bg: "rgba(224,101,74,0.12)", border: "rgba(224,101,74,0.4)" },
   { id: "medium", label: "Medium", icon: AlertTriangle, color: "#d9a953", bg: "rgba(217,169,83,0.12)", border: "rgba(217,169,83,0.4)" },
   { id: "low", label: "Low", icon: CircleDot, color: "#3fb6c9", bg: "rgba(63,182,201,0.12)", border: "rgba(63,182,201,0.4)" },
 ];
+
+const ROLE_OPTIONS = [
+  { id: "helper", label: "Helper" },
+  { id: "community_manager", label: "Community Manager" },
+  { id: "moderator", label: "Moderator" },
+  { id: "admin", label: "Admin" },
+  { id: "owner", label: "Owner" },
+];
+const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map((r) => [r.id, r.label]));
 
 const EMBERS = [
   { id: 1, left: "6%", size: "5px", duration: "16s", delay: "0s", drift: "20px", opacity: 0.5 },
@@ -25,7 +35,12 @@ const EMBERS = [
 ];
 
 export default function BugTracker() {
-  const [view, setView] = useState("bugs"); // "bugs" | "suggestions"
+  const { data: session, status: sessionStatus } = useSession();
+  const role = session?.user?.role;
+  const canEdit = role === "community_manager" || role === "admin" || role === "owner";
+  const isOwner = role === "owner";
+
+  const [view, setView] = useState("bugs"); // "bugs" | "suggestions" | "roles"
   const [bugs, setBugs] = useState(null);
   const [suggestions, setSuggestions] = useState(null);
   const [error, setError] = useState(null);
@@ -35,38 +50,21 @@ export default function BugTracker() {
   const [form, setForm] = useState({ title: "", description: "", reporter: "", priority: "medium" });
   const [noteFormOpenFor, setNoteFormOpenFor] = useState(null);
   const [noteDraft, setNoteDraft] = useState({ author: "", content: "" });
-  const [unlocked, setUnlocked] = useState(false);
-  const [editPasscode, setEditPasscode] = useState(""); // sent as header once verified
-  const [showUnlock, setShowUnlock] = useState(false);
-  const [passInput, setPassInput] = useState("");
-  const [passError, setPassError] = useState(false);
-  const [showPass, setShowPass] = useState(false);
   const [myVotes, setMyVotes] = useState({}); // { [suggestionId]: "up" | "down" }
-  const [voterName, setVoterName] = useState("");
-  const [voteError, setVoteError] = useState(null);
+  const [users, setUsers] = useState(null);
+  const [usersError, setUsersError] = useState(null);
 
-  // Remember the typed name for convenience only — it's not used for any
-  // access control by itself, the server checks it against the whitelist.
+  // Once signed in, pull this person's existing votes so their state is
+  // consistent no matter what device/browser they're on.
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("evolve-voter-name");
-      if (stored) setVoterName(stored);
-    } catch (e) {
-      // ignore
-    }
-  }, []);
-
-  // Once a name is set, pull that person's existing votes from the server
-  // so their state is consistent no matter what device/browser they're on.
-  useEffect(() => {
-    if (!voterName.trim()) {
+    if (!session) {
       setMyVotes({});
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/suggestions/votes?voter=${encodeURIComponent(voterName.trim())}`);
+        const res = await fetch("/api/suggestions/votes");
         if (!res.ok) return;
         const map = await res.json();
         if (!cancelled) setMyVotes(map);
@@ -77,36 +75,52 @@ export default function BugTracker() {
     return () => {
       cancelled = true;
     };
-  }, [voterName]);
+  }, [session]);
 
-  function updateVoterName(name) {
-    setVoterName(name);
-    setVoteError(null);
+  // Owner-only: load the staff list when the Roles tab is opened.
+  useEffect(() => {
+    if (view !== "roles" || !isOwner) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/users", { cache: "no-store" });
+        if (!res.ok) throw new Error("failed");
+        const list = await res.json();
+        if (!cancelled) setUsers(list);
+      } catch (e) {
+        if (!cancelled) setUsersError("Couldn't load the staff list.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [view, isOwner]);
+
+  async function updateUserRole(discordId, newRole) {
     try {
-      localStorage.setItem("evolve-voter-name", name);
+      const res = await fetch(`/api/users/${discordId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      if (!res.ok) throw new Error("failed");
+      setUsers((prev) => (prev || []).map((u) => (u.discordId === discordId ? { ...u, role: newRole } : u)));
+      setUsersError(null);
     } catch (e) {
-      // ignore
+      setUsersError("Couldn't update that role — try again.");
     }
   }
 
   async function castVote(itemId, type) {
-    const name = voterName.trim();
-    if (!name) {
-      setVoteError("Enter your name above before voting.");
-      return;
-    }
+    if (!session) return;
     const previousType = myVotes[itemId] || null;
     const nextType = previousType === type ? null : type; // clicking your current vote again retracts it
     try {
       const res = await fetch(`/api/suggestions/${itemId}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voterName: name, type: nextType }),
+        body: JSON.stringify({ type: nextType }),
       });
-      if (res.status === 403) {
-        setVoteError("That name isn't on the staff voting list. Ask a moderator to add you.");
-        return;
-      }
       if (!res.ok) throw new Error("failed");
       const counts = await res.json();
       setSuggestions((prev) =>
@@ -118,9 +132,9 @@ export default function BugTracker() {
         else delete next[itemId];
         return next;
       });
-      setVoteError(null);
+      setError(null);
     } catch (e) {
-      setVoteError("Couldn't record your vote — try again.");
+      setError("Couldn't record your vote — try again.");
     }
   }
 
@@ -162,10 +176,6 @@ export default function BugTracker() {
     },
   }[view];
 
-  function authHeaders() {
-    return { "Content-Type": "application/json", "x-edit-passcode": editPasscode };
-  }
-
   useEffect(() => {
     let cancelled = false;
 
@@ -199,26 +209,6 @@ export default function BugTracker() {
     };
   }, []);
 
-  async function tryUnlock() {
-    try {
-      const res = await fetch("/api/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-edit-passcode": passInput.trim() },
-      });
-      if (!res.ok) {
-        setPassError(true);
-        return;
-      }
-      setEditPasscode(passInput.trim());
-      setUnlocked(true);
-      setShowUnlock(false);
-      setPassInput("");
-      setPassError(false);
-    } catch (e) {
-      setPassError(true);
-    }
-  }
-
   function resetForm() {
     setForm({ title: "", description: "", reporter: "", priority: "medium" });
   }
@@ -234,11 +224,11 @@ export default function BugTracker() {
   }
 
   async function addItem() {
-    if (!unlocked || !form.title.trim()) return;
+    if (!canEdit || !form.title.trim()) return;
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error("failed");
@@ -252,11 +242,11 @@ export default function BugTracker() {
   }
 
   async function setStatus(id, status) {
-    if (!unlocked) return;
+    if (!canEdit) return;
     try {
       const res = await fetch(`${endpoint}/${id}`, {
         method: "PATCH",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
       if (!res.ok) throw new Error("failed");
@@ -268,11 +258,11 @@ export default function BugTracker() {
   }
 
   async function removeItem(id) {
-    if (!unlocked) return;
+    if (!canEdit) return;
     try {
       const res = await fetch(`${endpoint}/${id}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) throw new Error("failed");
       await refreshItems();
@@ -283,17 +273,17 @@ export default function BugTracker() {
   }
 
   function toggleNoteForm(itemId) {
-    if (!unlocked) return;
+    if (!canEdit) return;
     setNoteFormOpenFor((cur) => (cur === itemId ? null : itemId));
     setNoteDraft({ author: "", content: "" });
   }
 
   async function addItemNote(itemId) {
-    if (!unlocked || !noteDraft.content.trim()) return;
+    if (!canEdit || !noteDraft.content.trim()) return;
     try {
       const res = await fetch(`${endpoint}/${itemId}/notes`, {
         method: "POST",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(noteDraft),
       });
       if (!res.ok) throw new Error("failed");
@@ -307,11 +297,11 @@ export default function BugTracker() {
   }
 
   async function removeItemNote(itemId, noteId) {
-    if (!unlocked) return;
+    if (!canEdit) return;
     try {
       const res = await fetch(`${endpoint}/${itemId}/notes/${noteId}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) throw new Error("failed");
       await refreshItems();
@@ -319,6 +309,31 @@ export default function BugTracker() {
     } catch (e) {
       setError("Couldn't delete that note — try again.");
     }
+  }
+
+  if (sessionStatus === "loading") {
+    return (
+      <div style={styles.page}>
+        <div style={styles.loading}>Loading…</div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.signInCard}>
+          <div style={styles.crest}>
+            <Flame size={26} strokeWidth={1.8} />
+          </div>
+          <h1 style={styles.title}>EVOLVE <span style={styles.titleAccent}>Report Board</span></h1>
+          <p style={styles.signInCopy}>Sign in with your staff Discord account to view and use the board.</p>
+          <button className="bt-btn" style={styles.primaryBtn} onClick={() => signIn("discord")}>
+            Sign in with Discord
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (items === null) {
@@ -438,28 +453,29 @@ export default function BugTracker() {
           </div>
         </div>
         <div style={styles.headerActions}>
-          {unlocked ? (
-            <>
-              <span style={styles.unlockedTag}><Unlock size={12} /> Editing unlocked</span>
-              <button
-                className="bt-btn"
-                style={styles.primaryBtn}
-                onClick={() => setShowForm((s) => !s)}
-              >
-                {showForm ? <X size={16} /> : <Plus size={16} />}
-                {showForm ? "Close" : LABELS.addBtn}
-              </button>
-            </>
-          ) : (
-            <button className="bt-btn" style={styles.secondaryBtn} onClick={() => setShowUnlock((s) => !s)}>
-              <Lock size={15} /> {showUnlock ? "Close" : "Unlock to edit"}
+          <div style={styles.userTag}>
+            {session.user.image && <img src={session.user.image} alt="" style={styles.avatar} />}
+            <span style={styles.userName}>{session.user.name}</span>
+            <span style={styles.roleBadge}>{ROLE_LABEL[role] || role}</span>
+          </div>
+          {canEdit && view !== "roles" && (
+            <button
+              className="bt-btn"
+              style={styles.primaryBtn}
+              onClick={() => setShowForm((s) => !s)}
+            >
+              {showForm ? <X size={16} /> : <Plus size={16} />}
+              {showForm ? "Close" : LABELS.addBtn}
             </button>
           )}
+          <button className="bt-btn" style={styles.secondaryBtn} onClick={() => signOut()}>
+            <LogOut size={15} /> Sign out
+          </button>
         </div>
       </header>
 
       <div style={styles.viewSwitch}>
-        {["bugs", "suggestions"].map((v) => (
+        {["bugs", "suggestions", ...(isOwner ? ["roles"] : [])].map((v) => (
           <button
             key={v}
             className="bt-tab"
@@ -475,74 +491,40 @@ export default function BugTracker() {
               background: view === v ? "linear-gradient(180deg, #e9c876 0%, #c9a153 100%)" : "transparent",
             }}
           >
-            {v === "bugs" ? "Bugs" : "Suggestions"}
+            {v === "bugs" ? "Bugs" : v === "suggestions" ? "Suggestions" : (
+              <>
+                <ShieldCheck size={14} style={{ marginRight: 4, verticalAlign: "-2px" }} /> Manage Roles
+              </>
+            )}
           </button>
         ))}
       </div>
 
-
-      {showUnlock && !unlocked && (
-        <div className="bt-card" style={styles.unlockForm}>
-          <label style={styles.label}>
-            Edit passcode
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
+      {view === "roles" && isOwner && (
+        <div style={styles.list}>
+          {usersError && <div style={styles.errorBanner}>{usersError}</div>}
+          {users === null && <div style={styles.empty}>Loading staff list…</div>}
+          {users && users.length === 0 && <div style={styles.empty}>No one has signed in yet.</div>}
+          {users && users.map((u) => (
+            <div key={u.discordId} className="bt-card" style={{ ...styles.card, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 14, color: "#e6e9ec" }}>{u.username}</span>
+              <select
                 className="bt-input"
-                style={{ ...styles.input, flex: 1 }}
-                type={showPass ? "text" : "password"}
-                value={passInput}
-                onChange={(e) => {
-                  setPassInput(e.target.value);
-                  setPassError(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    tryUnlock();
-                  }
-                }}
-                placeholder="Enter the staff edit passcode"
-                autoFocus
-                autoComplete="off"
-                autoCapitalize="off"
-                spellCheck="false"
-              />
-              <button
-                type="button"
-                className="bt-icon-btn"
-                style={styles.actionBtn}
-                onClick={() => setShowPass((s) => !s)}
+                style={{ ...styles.input, width: "auto" }}
+                value={u.role}
+                onChange={(e) => updateUserRole(u.discordId, e.target.value)}
               >
-                {showPass ? "Hide" : "Show"}
-              </button>
+                {ROLE_OPTIONS.map((r) => (
+                  <option key={r.id} value={r.id}>{r.label}</option>
+                ))}
+              </select>
             </div>
-          </label>
-          {passError && <span style={styles.passError}>That passcode isn't right. Try again.</span>}
-          <div style={styles.formActions}>
-            <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={tryUnlock}>
-              Unlock
-            </button>
-          </div>
+          ))}
         </div>
       )}
 
-      {view === "suggestions" && (
-        <div style={styles.voterBar}>
-          <label style={styles.voterLabel}>
-            Voting as
-            <input
-              className="bt-input"
-              style={styles.voterInput}
-              value={voterName}
-              onChange={(e) => updateVoterName(e.target.value)}
-              placeholder="Your staff name"
-              autoComplete="off"
-            />
-          </label>
-          {voteError && <span style={styles.passError}>{voteError}</span>}
-        </div>
-      )}
-
+      {view !== "roles" && (
+      <>
       <div style={styles.controlsRow}>
         <div style={styles.tabs}>
           {[
@@ -741,7 +723,7 @@ export default function BugTracker() {
                   )}
                 </div>
               )}
-              {unlocked && (
+              {canEdit && (
               <div style={styles.cardActions}>
                 {item.status === "open" && (
                   <button className="bt-icon-btn" style={styles.actionBtn} onClick={() => setStatus(item.id, "in-progress")}>
@@ -774,20 +756,13 @@ export default function BugTracker() {
 
               {noteFormOpenFor === item.id && (
                 <div style={styles.noteForm}>
-                  <input
-                    className="bt-input"
-                    style={styles.input}
-                    value={noteDraft.author}
-                    onChange={(e) => setNoteDraft({ ...noteDraft, author: e.target.value })}
-                    placeholder="Your name"
-                    autoFocus
-                  />
                   <textarea
                     className="bt-input"
                     style={{ ...styles.input, minHeight: 64, resize: "vertical" }}
                     value={noteDraft.content}
                     onChange={(e) => setNoteDraft({ ...noteDraft, content: e.target.value })}
                     placeholder={view === "bugs" ? "What are you working on for this bug?" : "What's the plan for this suggestion?"}
+                    autoFocus
                   />
                   <div style={styles.formActions}>
                     <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={() => addItemNote(item.id)}>
@@ -813,7 +788,7 @@ export default function BugTracker() {
                             {" at "}
                             {new Date(note.postedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
                           </span>
-                          {unlocked && (
+                          {canEdit && (
                             <button
                               className="bt-icon-btn"
                               style={{ ...styles.actionBtn, padding: "2px 7px", marginLeft: "auto" }}
@@ -832,6 +807,8 @@ export default function BugTracker() {
           );
         })}
       </div>
+      </>
+      )}
       </div>
     </div>
   );
@@ -884,14 +861,33 @@ const styles = {
     fontFamily: "system-ui, sans-serif",
   },
   headerActions: { display: "flex", alignItems: "center", gap: 10 },
-  unlockedTag: {
+  userTag: {
     display: "flex",
     alignItems: "center",
-    gap: 4,
-    fontSize: 11.5,
-    color: "#3fb6c9",
+    gap: 8,
     fontFamily: "system-ui, sans-serif",
+  },
+  avatar: {
+    width: 26,
+    height: 26,
+    borderRadius: "50%",
+    border: "1px solid rgba(217,169,83,0.5)",
+  },
+  userName: {
+    fontSize: 13.5,
+    color: "#cdd5db",
     fontWeight: 600,
+  },
+  roleBadge: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#5fd4e8",
+    background: "rgba(63,182,201,0.12)",
+    border: "1px solid rgba(63,182,201,0.4)",
+    borderRadius: 4,
+    padding: "2px 7px",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   secondaryBtn: {
     display: "flex",
@@ -907,47 +903,25 @@ const styles = {
     cursor: "pointer",
     fontFamily: "system-ui, sans-serif",
   },
-  unlockForm: {
-    maxWidth: 760,
-    margin: "0 auto 20px",
+  signInCard: {
+    maxWidth: 380,
+    margin: "120px auto 0",
     background: "#1b2128",
     border: "1px solid #344049",
-    borderRadius: 10,
-    padding: 18,
+    borderRadius: 12,
+    padding: "36px 28px",
+    textAlign: "center",
     display: "flex",
     flexDirection: "column",
-    gap: 10,
-  },
-  voterBar: {
-    maxWidth: 760,
-    margin: "0 auto 14px",
-    display: "flex",
     alignItems: "center",
-    gap: 12,
-    flexWrap: "wrap",
+    gap: 14,
   },
-  voterLabel: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 12.5,
+  signInCopy: {
+    fontSize: 13.5,
     color: "#8b97a1",
     fontFamily: "system-ui, sans-serif",
-  },
-  voterInput: {
-    background: "#11151a",
-    border: "1px solid #344049",
-    borderRadius: 6,
-    padding: "6px 10px",
-    color: "#e6e9ec",
-    fontSize: 13,
-    fontFamily: "system-ui, sans-serif",
-    width: 180,
-  },
-  passError: {
-    fontSize: 12.5,
-    color: "#e0654a",
-    fontFamily: "system-ui, sans-serif",
+    lineHeight: 1.5,
+    margin: 0,
   },
   primaryBtn: {
     display: "flex",
