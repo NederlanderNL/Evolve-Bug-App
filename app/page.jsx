@@ -345,13 +345,8 @@ export default function BugTracker() {
           from { opacity: 0; transform: translate(-50%, calc(-50% - 16px)) scale(0.96); }
           to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
-        @keyframes panelBob {
-          0%, 100% { transform: translate(-50%, -50%); }
-          50%      { transform: translate(-50%, calc(-50% - 5px)); }
-        }
         .bt-triage-panel {
-          animation: panelFloatIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both,
-                     panelBob 4.5s ease-in-out 0.35s infinite;
+          animation: panelFloatIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
         .bt-card {
           animation: riseIn 0.25s ease both;
