@@ -166,18 +166,20 @@ export default function BugTracker() {
     if (syncing) return;
     setSyncing(true);
     setSyncMessage(null);
+    const syncEndpoint = view === "bugs" ? "/api/discord-sync" : "/api/discord-sync-suggestions";
+    const noun = view === "bugs" ? "bug" : "suggestion";
     try {
-      const res = await fetch("/api/discord-sync", { method: "POST" });
+      const res = await fetch(syncEndpoint, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         setSyncMessage(data.error || "Discord sync failed — check your bot setup.");
         return;
       }
       const parts = [];
-      parts.push(`Imported ${data.imported} new bug${data.imported === 1 ? "" : "s"}`);
+      parts.push(`Imported ${data.imported} new ${noun}${data.imported === 1 ? "" : "s"}`);
       if (data.skippedDuplicate) parts.push(`skipped ${data.skippedDuplicate} likely duplicate${data.skippedDuplicate === 1 ? "" : "s"}`);
       setSyncMessage(parts.join(", ") + ".");
-      if (data.imported > 0 && view === "bugs") {
+      if (data.imported > 0) {
         await refreshItems();
       }
     } catch (e) {
@@ -404,17 +406,15 @@ export default function BugTracker() {
           </div>
         </div>
         <div style={styles.headerActions}>
-          {view === "bugs" && (
-            <button
-              className="bt-btn"
-              style={styles.secondaryBtn}
-              onClick={syncFromDiscord}
-              disabled={syncing}
-            >
-              <RefreshCw size={15} className={syncing ? "bt-spin" : ""} />
-              {syncing ? "Syncing…" : "Sync from Discord"}
-            </button>
-          )}
+          <button
+            className="bt-btn"
+            style={styles.secondaryBtn}
+            onClick={syncFromDiscord}
+            disabled={syncing}
+          >
+            <RefreshCw size={15} className={syncing ? "bt-spin" : ""} />
+            {syncing ? "Syncing…" : view === "bugs" ? "Sync bugs from Discord" : "Sync suggestions from Discord"}
+          </button>
           <button
             className="bt-btn"
             style={styles.primaryBtn}
@@ -438,6 +438,7 @@ export default function BugTracker() {
               setShowForm(false);
               setNoteFormOpenFor(null);
               setFilter("open");
+              setSyncMessage(null);
             }}
             style={{
               ...styles.viewTab,

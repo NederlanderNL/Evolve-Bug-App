@@ -3,10 +3,10 @@ import { runDiscordSync } from "../../../lib/discordSync";
 
 export async function POST() {
   const result = await runDiscordSync({
-    table: "bugs",
-    channelEnvVar: "DISCORD_BUG_FORUM_CHANNEL_ID",
-    syncKey: "discord_bugs_last_sync",
-    missingConfigLabel: "DISCORD_BUG_FORUM_CHANNEL_ID",
+    table: "suggestions",
+    channelEnvVar: "DISCORD_SUGGESTION_FORUM_CHANNEL_ID",
+    syncKey: "discord_suggestions_last_sync",
+    missingConfigLabel: "DISCORD_SUGGESTION_FORUM_CHANNEL_ID",
   });
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status });
