@@ -952,6 +952,7 @@ const styles = {
     left: "50%",
     transform: "translate(-50%, -50%)",
     width: 720,
+    height: "min(720px, calc(100vh - 80px))",
     maxWidth: "calc(100vw - 40px)",
     maxHeight: "calc(100vh - 80px)",
     zIndex: 40,
@@ -1011,6 +1012,8 @@ const styles = {
     overflowY: "auto",
     display: "flex",
     flexDirection: "column",
+    flex: 1,
+    minHeight: 0,
   },
   triageRow: {
     display: "flex",
