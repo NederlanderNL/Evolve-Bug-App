@@ -342,12 +342,12 @@ export default function BugTracker() {
       <style>{`
         @keyframes riseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes panelFloatIn {
-          from { opacity: 0; transform: translate(-50%, -14px) scale(0.97); }
-          to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+          from { opacity: 0; transform: translate(-50%, calc(-50% - 16px)) scale(0.96); }
+          to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
         @keyframes panelBob {
-          0%, 100% { transform: translate(-50%, 0); }
-          50%      { transform: translate(-50%, -4px); }
+          0%, 100% { transform: translate(-50%, -50%); }
+          50%      { transform: translate(-50%, calc(-50% - 5px)); }
         }
         .bt-triage-panel {
           animation: panelFloatIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both,
@@ -423,7 +423,7 @@ export default function BugTracker() {
           .bt-glow { animation: none; }
           .bt-live-dot { animation: none; }
           .bt-spin { animation: none; }
-          .bt-triage-panel { animation: none; transform: translateX(-50%); }
+          .bt-triage-panel { animation: none; transform: translate(-50%, -50%); }
         }
       `}</style>
 
@@ -446,6 +446,10 @@ export default function BugTracker() {
         ))}
       </div>
 
+      {triageQueue.length > 0 && !triageCollapsed && (
+        <div style={styles.triageBackdrop} aria-hidden="true" />
+      )}
+
       {triageQueue.length > 0 && (
         <div className="bt-card bt-triage-panel" style={styles.triagePanel}>
           <div style={styles.triageHeader}>
@@ -466,8 +470,12 @@ export default function BugTracker() {
               {triageQueue.map((entry) => (
                 <div key={`${entry.itemType}-${entry.id}`} style={styles.triageRow}>
                   <div style={styles.triageRowText}>
-                    <span style={styles.triageTypeTag}>{entry.itemType === "bugs" ? "Bug" : "Suggestion"}</span>
+                    <div style={styles.triageRowHead}>
+                      <span style={styles.triageTypeTag}>{entry.itemType === "bugs" ? "Bug" : "Suggestion"}</span>
+                      <span style={styles.triageReporter}>by {entry.reporter}</span>
+                    </div>
                     <span style={styles.triageRowTitle}>{entry.title}</span>
+                    {entry.description && <p style={styles.triageRowDesc}>{entry.description}</p>}
                   </div>
                   <div style={styles.triageButtons}>
                     {PRIORITIES.map((p) => {
@@ -477,7 +485,6 @@ export default function BugTracker() {
                           key={p.id}
                           type="button"
                           className="bt-icon-btn"
-                          title={`Set ${p.label} priority`}
                           onClick={() => setTriagePriority(entry.itemType, entry.id, p.id)}
                           style={{
                             ...styles.triageBtn,
@@ -486,7 +493,7 @@ export default function BugTracker() {
                             background: p.bg,
                           }}
                         >
-                          <Icon size={13} />
+                          <Icon size={15} /> {p.label}
                         </button>
                       );
                     })}
@@ -932,60 +939,67 @@ const styles = {
     fontSize: 13,
     fontFamily: "var(--font-body), system-ui, sans-serif",
   },
+  triageBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(8,10,13,0.55)",
+    zIndex: 35,
+    pointerEvents: "none",
+  },
   triagePanel: {
     position: "fixed",
-    top: 90,
+    top: "50%",
     left: "50%",
-    transform: "translateX(-50%)",
-    width: 380,
-    maxWidth: "calc(100vw - 32px)",
-    maxHeight: "min(60vh, 460px)",
+    transform: "translate(-50%, -50%)",
+    width: 720,
+    maxWidth: "calc(100vw - 40px)",
+    maxHeight: "calc(100vh - 80px)",
     zIndex: 40,
     padding: 0,
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
     border: "1px solid rgba(217,169,83,0.5)",
-    boxShadow: "0 20px 50px rgba(0,0,0,0.55), 0 0 0 1px rgba(217,169,83,0.08)",
-    background: "rgba(27,33,40,0.92)",
-    backdropFilter: "blur(10px)",
-    WebkitBackdropFilter: "blur(10px)",
+    boxShadow: "0 30px 70px rgba(0,0,0,0.6), 0 0 0 1px rgba(217,169,83,0.08)",
+    background: "rgba(24,29,35,0.96)",
+    backdropFilter: "blur(14px)",
+    WebkitBackdropFilter: "blur(14px)",
   },
   triageHeader: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "12px 14px",
+    padding: "16px 20px",
     borderBottom: "1px solid #28313a",
     background: "rgba(217,169,83,0.06)",
   },
   triageTitle: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
-    fontSize: 13,
+    gap: 10,
+    fontSize: 15,
     fontWeight: 700,
     color: "#e9c876",
     fontFamily: "var(--font-body), system-ui, sans-serif",
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   triageCount: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 18,
-    height: 18,
-    padding: "0 5px",
-    borderRadius: 9,
+    minWidth: 22,
+    height: 22,
+    padding: "0 6px",
+    borderRadius: 11,
     background: "#e0654a",
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12.5,
     fontWeight: 700,
   },
   triageCollapseBtn: {
-    padding: "3px 9px",
-    fontSize: 11.5,
+    padding: "5px 12px",
+    fontSize: 12.5,
     border: "1px solid #344049",
     color: "#8b97a1",
     background: "transparent",
@@ -1000,17 +1014,23 @@ const styles = {
   },
   triageRow: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 10,
-    padding: "10px 14px",
+    gap: 18,
+    padding: "18px 20px",
     borderBottom: "1px solid #232a32",
   },
   triageRowText: {
     display: "flex",
     flexDirection: "column",
-    gap: 3,
+    gap: 5,
     minWidth: 0,
+    flex: 1,
+  },
+  triageRowHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
   },
   triageTypeTag: {
     fontSize: 10,
@@ -1020,29 +1040,45 @@ const styles = {
     letterSpacing: 0.3,
     fontFamily: "var(--font-body), system-ui, sans-serif",
   },
-  triageRowTitle: {
-    fontSize: 13,
-    color: "#e6e9ec",
+  triageReporter: {
+    fontSize: 11.5,
+    color: "#5c6772",
     fontFamily: "var(--font-body), system-ui, sans-serif",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    maxWidth: 250,
+  },
+  triageRowTitle: {
+    fontSize: 15,
+    fontWeight: 600,
+    color: "#e9c876",
+    fontFamily: "var(--font-display), Georgia, serif",
+    lineHeight: 1.35,
+  },
+  triageRowDesc: {
+    margin: 0,
+    fontSize: 13,
+    color: "#aab5bd",
+    lineHeight: 1.5,
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    whiteSpace: "pre-wrap",
   },
   triageButtons: {
     display: "flex",
-    gap: 4,
+    flexDirection: "column",
+    gap: 6,
     flexShrink: 0,
   },
   triageBtn: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "center",
-    width: 26,
-    height: 26,
-    borderRadius: 5,
+    gap: 6,
+    justifyContent: "flex-start",
+    width: 110,
+    padding: "7px 10px",
+    borderRadius: 6,
     border: "1px solid",
     cursor: "pointer",
+    fontSize: 12.5,
+    fontWeight: 600,
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   primaryBtn: {
     display: "flex",
