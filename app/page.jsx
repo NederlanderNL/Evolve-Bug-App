@@ -1,7 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, ThumbsUp, ThumbsDown, RefreshCw } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { AlertTriangle, Flame, CircleDot, Plus, X, CheckCircle2, RotateCcw, Trash2, NotebookPen, ThumbsUp, ThumbsDown, RefreshCw, Users, Eye } from "lucide-react";
+
+const ROLE_LABELS = {
+  helper: "Helper",
+  moderator: "Moderator",
+  community_manager: "Community Manager",
+  admin: "Admin",
+  owner: "Owner",
+};
+
+const TAB_LABELS = { bugs: "Bugs", suggestions: "Suggestions" };
 
 const PRIORITIES = [
   { id: "high", label: "High", icon: Flame, color: "#e0654a", bg: "rgba(224,101,74,0.12)", border: "rgba(224,101,74,0.4)" },
@@ -55,6 +65,15 @@ function FixedCountdown({ fixedAt }) {
 }
 
 export default function BugTracker() {
+  // ── Online sidebar (demo mode — random Staff name assigned per session) ──
+  const sessionId = useRef(Math.random().toString(36).slice(2));
+  const [staffName] = useState(() => {
+    const names = ["Staff 1","Staff 2","Staff 3","Staff 4","Staff 5","Staff 6","Staff 7","Staff 8"];
+    return names[Math.floor(Math.random() * names.length)];
+  });
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   const [view, setView] = useState("bugs"); // "bugs" | "suggestions"
   const [bugs, setBugs] = useState(null);
   const [suggestions, setSuggestions] = useState(null);
@@ -72,6 +91,35 @@ export default function BugTracker() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
   const [triageCollapsed, setTriageCollapsed] = useState(false);
+
+  // Ping presence every 30s so others can see this session online,
+  // and fetch who else is online every 5s.
+  useEffect(() => {
+    function ping() {
+      fetch("/api/presence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: sessionId.current, username: staffName, currentTab: view }),
+      }).catch(() => {});
+    }
+    function fetchOnline() {
+      fetch("/api/presence").then((r) => r.json()).then(setOnlineUsers).catch(() => {});
+    }
+    ping();
+    fetchOnline();
+    const pingId = setInterval(ping, 30000);
+    const fetchId = setInterval(fetchOnline, 5000);
+    return () => { clearInterval(pingId); clearInterval(fetchId); };
+  }, [view, staffName]);
+
+  // Remove this session from presence when the tab closes.
+  useEffect(() => {
+    const handler = () => {
+      navigator.sendBeacon("/api/presence/leave", JSON.stringify({ sessionId: sessionId.current }));
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
 
   useEffect(() => {
     try {
@@ -376,6 +424,7 @@ export default function BugTracker() {
     }
   }
 
+  // Auth loading state
   if (items === null) {
     return (
       <div style={styles.page}>
@@ -410,6 +459,52 @@ export default function BugTracker() {
   };
 
   return (
+    <div style={styles.pageWithSidebar}>
+    {/* ── Online sidebar ── */}
+    <aside style={{ ...styles.sidebar, width: sidebarOpen ? 220 : 48 }}>
+      <button
+        className="bt-icon-btn"
+        style={styles.sidebarToggle}
+        onClick={() => setSidebarOpen((s) => !s)}
+        title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+      >
+        <Users size={16} />
+        {sidebarOpen && <span style={{ marginLeft: 6, fontSize: 12.5, fontWeight: 700 }}>Online ({onlineUsers.length})</span>}
+      </button>
+
+      {sidebarOpen && (
+        <div style={styles.sidebarList}>
+          {onlineUsers.length === 0 && (
+            <span style={styles.sidebarEmpty}>Nobody else online</span>
+          )}
+          {onlineUsers.map((u) => (
+            <div key={u.username} style={styles.sidebarUser}>
+              <div style={styles.sidebarUserTop}>
+                <span style={styles.onlineDot} />
+                <span style={styles.sidebarUsername}>{u.username}</span>
+              </div>
+              <div style={styles.sidebarMeta}>
+                <span style={styles.sidebarRole}>{ROLE_LABELS[u.role] || u.role}</span>
+                <span style={styles.sidebarTab}><Eye size={10} /> {TAB_LABELS[u.currentTab] || u.currentTab}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {sidebarOpen && (
+        <div style={styles.sidebarFooter}>
+          <div style={styles.sidebarCurrentUser}>
+            <span style={styles.onlineDot} />
+            <div>
+              <div style={styles.sidebarUsername}>{staffName}</div>
+              <div style={styles.sidebarRole}>You</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </aside>
+
     <div style={styles.page}>
       <style>{`
         @keyframes riseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -979,13 +1074,175 @@ export default function BugTracker() {
       </div>
       </div>
     </div>
+    </div>
   );
 }
 
 const styles = {
-  page: {
+  pageWithSidebar: {
+    display: "flex",
     minHeight: "100vh",
     background: "radial-gradient(ellipse at 50% 0%, #232c36 0%, #161b21 55%, #10141a 100%)",
+  },
+  loginCard: {
+    maxWidth: 360,
+    margin: "120px auto 0",
+    background: "#1b2128",
+    border: "1px solid #344049",
+    borderRadius: 12,
+    padding: "36px 28px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 16,
+    boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
+  },
+  sidebar: {
+    flexShrink: 0,
+    background: "#141920",
+    borderRight: "1px solid #28313a",
+    display: "flex",
+    flexDirection: "column",
+    padding: "12px 0",
+    transition: "width 0.2s ease",
+    overflow: "hidden",
+    position: "sticky",
+    top: 0,
+    height: "100vh",
+    zIndex: 10,
+  },
+  sidebarToggle: {
+    display: "flex",
+    alignItems: "center",
+    padding: "8px 14px",
+    background: "transparent",
+    border: "none",
+    color: "#e9c876",
+    cursor: "pointer",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    fontWeight: 700,
+    fontSize: 12.5,
+    whiteSpace: "nowrap",
+    marginBottom: 8,
+    borderRadius: 0,
+  },
+  sidebarList: {
+    flex: 1,
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    padding: "0 8px",
+  },
+  sidebarEmpty: {
+    fontSize: 12,
+    color: "#5c6772",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    padding: "8px 6px",
+    fontStyle: "italic",
+  },
+  sidebarUser: {
+    padding: "8px 8px",
+    borderRadius: 6,
+    background: "rgba(255,255,255,0.03)",
+    border: "1px solid #1e252d",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  sidebarUserTop: {
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+  },
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: "50%",
+    background: "#3fb6c9",
+    flexShrink: 0,
+    boxShadow: "0 0 5px rgba(63,182,201,0.7)",
+  },
+  sidebarUsername: {
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: "#e6e9ec",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  sidebarMeta: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 14,
+  },
+  sidebarRole: {
+    fontSize: 10.5,
+    color: "#7c8a96",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    whiteSpace: "nowrap",
+  },
+  sidebarTab: {
+    display: "flex",
+    alignItems: "center",
+    gap: 3,
+    fontSize: 10.5,
+    color: "#5fd4e8",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    whiteSpace: "nowrap",
+  },
+  sidebarFooter: {
+    borderTop: "1px solid #28313a",
+    padding: "10px 12px",
+    marginTop: "auto",
+  },
+  sidebarCurrentUser: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  sidebarBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    background: "transparent",
+    border: "1px solid #344049",
+    borderRadius: 5,
+    padding: "6px 8px",
+    fontSize: 11.5,
+    color: "#8b97a1",
+    cursor: "pointer",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    whiteSpace: "nowrap",
+  },
+  accountsPanel: {
+    position: "fixed",
+    left: 230,
+    top: 20,
+    width: 480,
+    maxHeight: "calc(100vh - 40px)",
+    overflowY: "auto",
+    zIndex: 50,
+    padding: 18,
+    background: "#1b2128",
+    border: "1px solid rgba(217,169,83,0.4)",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+  },
+  accountRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 10px",
+    background: "#161b21",
+    borderRadius: 6,
+    border: "1px solid #28313a",
+  },
+  page: {
+    flex: 1,
+    minHeight: "100vh",
     color: "#e6e9ec",
     fontFamily: "var(--font-display), Georgia, serif",
     padding: "32px 20px 60px",
