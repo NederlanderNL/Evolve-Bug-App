@@ -61,6 +61,8 @@ export default function BugTracker() {
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState(false);
+  const [duplicateMatch, setDuplicateMatch] = useState(null); // { match, score }
+  const [showDuplicateDetail, setShowDuplicateDetail] = useState(false);
   const [filter, setFilter] = useState("open");
   const [sortBy, setSortBy] = useState("priority"); // "priority" | "date"
   const [form, setForm] = useState({ title: "", description: "", reporter: "", priority: "medium" });
@@ -187,6 +189,8 @@ export default function BugTracker() {
   function resetForm() {
     setForm({ title: "", description: "", reporter: "", priority: "medium" });
     setDuplicateWarning(false);
+    setDuplicateMatch(null);
+    setShowDuplicateDetail(false);
   }
 
   async function refreshItems() {
@@ -252,8 +256,10 @@ export default function BugTracker() {
         body: JSON.stringify({ ...form, force }),
       });
       if (res.status === 409) {
-        // Likely duplicate — show warning and let staff decide.
+        const data = await res.json();
+        setDuplicateMatch(data.match ? { match: data.match, score: data.score } : null);
         setDuplicateWarning(true);
+        setShowDuplicateDetail(false);
         return;
       }
       if (!res.ok) throw new Error("failed");
@@ -713,9 +719,37 @@ export default function BugTracker() {
           </label>
           {duplicateWarning && (
             <div style={styles.duplicateWarning}>
-              <strong>Possible duplicate</strong> — this looks similar to an existing {view === "bugs" ? "bug" : "suggestion"}.
-              Double-check the board before submitting.
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                <span>
+                  <strong>Possible duplicate</strong> — this looks similar to an existing {view === "bugs" ? "bug" : "suggestion"}
+                  {duplicateMatch ? ` (${duplicateMatch.score}% match)` : ""}.
+                </span>
+                {duplicateMatch && (
+                  <button
+                    type="button"
+                    className="bt-btn"
+                    style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12 }}
+                    onClick={() => setShowDuplicateDetail((s) => !s)}
+                  >
+                    {showDuplicateDetail ? "Hide match ▲" : "See what it matched ▼"}
+                  </button>
+                )}
+              </div>
+              {showDuplicateDetail && duplicateMatch && (
+                <div style={styles.duplicateDetail}>
+                  <div style={styles.duplicateDetailTitle}>{duplicateMatch.match.title}</div>
+                  {duplicateMatch.match.description && (
+                    <p style={styles.duplicateDetailDesc}>{duplicateMatch.match.description}</p>
+                  )}
+                  <div style={styles.duplicateDetailMeta}>
+                    Reported by <strong>{duplicateMatch.match.reporter}</strong>
+                    {duplicateMatch.match.reportedAt && (
+                      <> · {new Date(duplicateMatch.match.reportedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={() => addItem(true)}>
                   Submit anyway
                 </button>
@@ -1181,6 +1215,35 @@ const styles = {
     fontSize: 13,
     fontFamily: "var(--font-body), system-ui, sans-serif",
     lineHeight: 1.5,
+  },
+  duplicateDetail: {
+    marginTop: 10,
+    background: "rgba(0,0,0,0.2)",
+    border: "1px solid rgba(217,169,83,0.2)",
+    borderRadius: 6,
+    padding: "10px 12px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  duplicateDetailTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "#e9c876",
+    fontFamily: "var(--font-display), Georgia, serif",
+  },
+  duplicateDetailDesc: {
+    margin: 0,
+    fontSize: 12.5,
+    color: "#aab5bd",
+    lineHeight: 1.5,
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    whiteSpace: "pre-wrap",
+  },
+  duplicateDetailMeta: {
+    fontSize: 11.5,
+    color: "#5c6772",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
   },
   form: {
     maxWidth: 760,
