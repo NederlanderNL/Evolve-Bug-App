@@ -750,14 +750,9 @@ export default function BugTracker() {
                   </span>
                 )}
                 <h3 style={{ ...styles.cardTitle, textDecoration: fixed ? "line-through" : "none" }}>{item.title}</h3>
+                {fixed && <span style={{ marginLeft: "auto" }}><FixedCountdown fixedAt={item.fixedAt} /></span>}
               </div>
               {item.description && <p style={styles.cardDesc}>{item.description}</p>}
-              <div style={styles.cardMeta}>
-                <span>{LABELS.reporterLabel} <strong style={{ color: "#e9c876" }}>{item.reporter}</strong></span>
-                <span style={styles.dot}>•</span>
-                <span>{new Date(item.reportedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
-              </div>
-              {fixed && <FixedCountdown fixedAt={item.fixedAt} />}
 
               {view === "suggestions" && (
                 <div style={styles.voteRow}>
@@ -934,7 +929,6 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     gap: 4,
-    marginTop: 6,
     fontSize: 11.5,
     color: "#5c6772",
     fontFamily: "var(--font-body), system-ui, sans-serif",
@@ -943,6 +937,7 @@ const styles = {
     border: "1px solid #28313a",
     borderRadius: 4,
     padding: "3px 8px",
+    flexShrink: 0,
   },
   headerActions: { display: "flex", alignItems: "center", gap: 10 },
   secondaryBtn: {
