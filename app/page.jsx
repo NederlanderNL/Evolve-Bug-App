@@ -585,7 +585,7 @@ export default function BugTracker() {
           {[
             { id: "open", label: `Open (${counts.open})` },
             { id: "in-progress", label: `In progress (${counts.inProgress})` },
-            { id: "fixed", label: `Fixed (${counts.fixed})` },
+            { id: "fixed", label: `${view === "suggestions" ? "Implemented" : "Fixed"} (${counts.fixed})` },
             { id: "all", label: `All (${counts.all})` },
           ].map((t) => (
             <button
