@@ -24,6 +24,36 @@ const EMBERS = [
   { id: 12, left: "48%", size: "3px", duration: "26s", delay: "11s", drift: "-8px", opacity: 0.3 },
 ];
 
+const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+
+function formatDiff(ms) {
+  if (ms <= 0) return "Deleting soon…";
+  const w = Math.floor(ms / (7 * 24 * 60 * 60 * 1000));
+  const d = Math.floor((ms % (7 * 24 * 60 * 60 * 1000)) / (24 * 60 * 60 * 1000));
+  const h = Math.floor((ms % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  const m = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+  const s = Math.floor((ms % (60 * 1000)) / 1000);
+  return `${w}w ${d}d ${h}h ${m}m ${s}s`;
+}
+
+function FixedCountdown({ fixedAt }) {
+  const [label, setLabel] = React.useState("");
+
+  React.useEffect(() => {
+    if (!fixedAt) return;
+    const deleteAt = new Date(fixedAt).getTime() + TWO_WEEKS_MS;
+    function tick() {
+      setLabel(formatDiff(deleteAt - Date.now()));
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [fixedAt]);
+
+  if (!fixedAt || !label) return null;
+  return <span style={styles.fixedCountdown}>🗑 Deletes in {label}</span>;
+}
+
 export default function BugTracker() {
   const [view, setView] = useState("bugs"); // "bugs" | "suggestions"
   const [bugs, setBugs] = useState(null);
@@ -39,8 +69,6 @@ export default function BugTracker() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
   const [triageCollapsed, setTriageCollapsed] = useState(false);
-  const [nextCleanup, setNextCleanup] = useState(null);
-  const [countdown, setCountdown] = useState(null);
 
   useEffect(() => {
     try {
@@ -50,49 +78,6 @@ export default function BugTracker() {
       // ignore — voting will just not be remembered this session
     }
   }, []);
-
-  // Fetch the next cleanup time, and trigger a cleanup automatically if
-  // the two-week window has already passed.
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/cleanup");
-        const data = await res.json();
-        const next = new Date(data.nextCleanup);
-        if (next <= new Date()) {
-          // Overdue — run the cleanup immediately and get the new next time.
-          const cleanRes = await fetch("/api/cleanup", { method: "POST" });
-          const cleanData = await cleanRes.json();
-          setNextCleanup(new Date(cleanData.nextCleanup));
-        } else {
-          setNextCleanup(next);
-        }
-      } catch (e) {
-        // ignore — countdown just won't show
-      }
-    })();
-  }, []);
-
-  // Tick the countdown every second.
-  useEffect(() => {
-    if (!nextCleanup) return;
-    function tick() {
-      const diff = nextCleanup - new Date();
-      if (diff <= 0) {
-        setCountdown("Cleaning up now…");
-        return;
-      }
-      const weeks  = Math.floor(diff / (7 * 24 * 60 * 60 * 1000));
-      const days   = Math.floor((diff % (7 * 24 * 60 * 60 * 1000)) / (24 * 60 * 60 * 1000));
-      const hours  = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-      const mins   = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
-      const secs   = Math.floor((diff % (60 * 1000)) / 1000);
-      setCountdown(`${weeks}w ${days}d ${hours}h ${mins}m ${secs}s`);
-    }
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [nextCleanup]);
 
   async function castVote(itemId, type) {
     const previousType = myVotes[itemId] || null;
@@ -184,6 +169,10 @@ export default function BugTracker() {
 
     // initial load
     fetchAll();
+    // Trigger cleanup silently on page load — deletes any fixed items older
+    // than 2 weeks. Safe to call frequently; the server only acts if there's
+    // actually something to delete.
+    fetch("/api/cleanup", { method: "POST" }).catch(() => {});
 
     // poll for changes from other staff every few seconds
     const interval = setInterval(fetchAll, 4000);
@@ -543,9 +532,6 @@ export default function BugTracker() {
           <div>
             <h1 style={styles.title}>EVOLVE <span style={styles.titleAccent}>Report Board</span></h1>
             <span style={styles.liveTag}><span className="bt-live-dot" />Live — syncs every few seconds</span>
-            {countdown && (
-              <span style={styles.cleanupTag}>🗑 Fixed items clear in {countdown}</span>
-            )}
           </div>
         </div>
         <div style={styles.headerActions}>
@@ -771,6 +757,7 @@ export default function BugTracker() {
                 <span style={styles.dot}>•</span>
                 <span>{new Date(item.reportedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
               </div>
+              {fixed && <FixedCountdown fixedAt={item.fixedAt} />}
 
               {view === "suggestions" && (
                 <div style={styles.voteRow}>
@@ -943,14 +930,19 @@ const styles = {
     color: "#7c8a96",
     fontFamily: "var(--font-body), system-ui, sans-serif",
   },
-  cleanupTag: {
-    display: "flex",
+  fixedCountdown: {
+    display: "inline-flex",
     alignItems: "center",
-    marginTop: 3,
+    gap: 4,
+    marginTop: 6,
     fontSize: 11.5,
     color: "#5c6772",
     fontFamily: "var(--font-body), system-ui, sans-serif",
     fontVariantNumeric: "tabular-nums",
+    background: "rgba(92,103,114,0.08)",
+    border: "1px solid #28313a",
+    borderRadius: 4,
+    padding: "3px 8px",
   },
   headerActions: { display: "flex", alignItems: "center", gap: 10 },
   secondaryBtn: {
