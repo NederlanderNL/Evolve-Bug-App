@@ -10,11 +10,11 @@ export async function POST() {
   const cutoff = new Date(Date.now() - TWO_WEEKS_MS).toISOString();
 
   const res = await db.execute({
-    sql: `DELETE FROM bugs WHERE status = 'fixed' AND reportedAt < ?`,
+    sql: `DELETE FROM bugs WHERE status = 'fixed' AND fixedAt IS NOT NULL AND fixedAt < ?`,
     args: [cutoff],
   });
   const res2 = await db.execute({
-    sql: `DELETE FROM suggestions WHERE status = 'fixed' AND reportedAt < ?`,
+    sql: `DELETE FROM suggestions WHERE status = 'fixed' AND fixedAt IS NOT NULL AND fixedAt < ?`,
     args: [cutoff],
   });
 
