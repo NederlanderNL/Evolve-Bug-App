@@ -39,6 +39,8 @@ export default function BugTracker() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
   const [triageCollapsed, setTriageCollapsed] = useState(false);
+  const [nextCleanup, setNextCleanup] = useState(null);
+  const [countdown, setCountdown] = useState(null);
 
   useEffect(() => {
     try {
@@ -48,6 +50,49 @@ export default function BugTracker() {
       // ignore — voting will just not be remembered this session
     }
   }, []);
+
+  // Fetch the next cleanup time, and trigger a cleanup automatically if
+  // the two-week window has already passed.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/cleanup");
+        const data = await res.json();
+        const next = new Date(data.nextCleanup);
+        if (next <= new Date()) {
+          // Overdue — run the cleanup immediately and get the new next time.
+          const cleanRes = await fetch("/api/cleanup", { method: "POST" });
+          const cleanData = await cleanRes.json();
+          setNextCleanup(new Date(cleanData.nextCleanup));
+        } else {
+          setNextCleanup(next);
+        }
+      } catch (e) {
+        // ignore — countdown just won't show
+      }
+    })();
+  }, []);
+
+  // Tick the countdown every second.
+  useEffect(() => {
+    if (!nextCleanup) return;
+    function tick() {
+      const diff = nextCleanup - new Date();
+      if (diff <= 0) {
+        setCountdown("Cleaning up now…");
+        return;
+      }
+      const weeks  = Math.floor(diff / (7 * 24 * 60 * 60 * 1000));
+      const days   = Math.floor((diff % (7 * 24 * 60 * 60 * 1000)) / (24 * 60 * 60 * 1000));
+      const hours  = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+      const mins   = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+      const secs   = Math.floor((diff % (60 * 1000)) / 1000);
+      setCountdown(`${weeks}w ${days}d ${hours}h ${mins}m ${secs}s`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [nextCleanup]);
 
   async function castVote(itemId, type) {
     const previousType = myVotes[itemId] || null;
@@ -498,6 +543,9 @@ export default function BugTracker() {
           <div>
             <h1 style={styles.title}>EVOLVE <span style={styles.titleAccent}>Report Board</span></h1>
             <span style={styles.liveTag}><span className="bt-live-dot" />Live — syncs every few seconds</span>
+            {countdown && (
+              <span style={styles.cleanupTag}>🗑 Fixed items clear in {countdown}</span>
+            )}
           </div>
         </div>
         <div style={styles.headerActions}>
@@ -894,6 +942,15 @@ const styles = {
     fontSize: 12,
     color: "#7c8a96",
     fontFamily: "var(--font-body), system-ui, sans-serif",
+  },
+  cleanupTag: {
+    display: "flex",
+    alignItems: "center",
+    marginTop: 3,
+    fontSize: 11.5,
+    color: "#5c6772",
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    fontVariantNumeric: "tabular-nums",
   },
   headerActions: { display: "flex", alignItems: "center", gap: 10 },
   secondaryBtn: {
