@@ -60,6 +60,7 @@ export default function BugTracker() {
   const [suggestions, setSuggestions] = useState(null);
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(false);
   const [filter, setFilter] = useState("open");
   const [sortBy, setSortBy] = useState("priority"); // "priority" | "date"
   const [form, setForm] = useState({ title: "", description: "", reporter: "", priority: "medium" });
@@ -185,6 +186,7 @@ export default function BugTracker() {
 
   function resetForm() {
     setForm({ title: "", description: "", reporter: "", priority: "medium" });
+    setDuplicateWarning(false);
   }
 
   async function refreshItems() {
@@ -217,6 +219,13 @@ export default function BugTracker() {
             ? `Discord isn't connected yet — added ${data.imported} test ${noun}${data.imported === 1 ? "" : "s"} so you can try the triage panel`
             : `Discord isn't connected yet — the test ${noun}s are already on the board`
         );
+      } else if (data.source === "webhook") {
+        parts.push(
+          data.imported > 0
+            ? `Moved ${data.imported} queued ${noun}${data.imported === 1 ? "" : "s"} from Discord to the board`
+            : `No new ${noun}s queued from Discord`
+        );
+        if (data.skippedDuplicate) parts.push(`skipped ${data.skippedDuplicate} likely duplicate${data.skippedDuplicate === 1 ? "" : "s"}`);
       } else {
         parts.push(`Imported ${data.imported} new ${noun}${data.imported === 1 ? "" : "s"}`);
         if (data.skippedDuplicate) parts.push(`skipped ${data.skippedDuplicate} likely duplicate${data.skippedDuplicate === 1 ? "" : "s"}`);
@@ -233,17 +242,24 @@ export default function BugTracker() {
   }
 
 
-  async function addItem() {
+  async function addItem(force = false) {
     if (!form.title.trim()) return;
+    setDuplicateWarning(false);
     try {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, force }),
       });
+      if (res.status === 409) {
+        // Likely duplicate — show warning and let staff decide.
+        setDuplicateWarning(true);
+        return;
+      }
       if (!res.ok) throw new Error("failed");
       resetForm();
       setShowForm(false);
+      setDuplicateWarning(false);
       await refreshItems();
       setError(null);
     } catch (e) {
@@ -695,11 +711,27 @@ export default function BugTracker() {
               placeholder={LABELS.descPlaceholder}
             />
           </label>
-          <div style={styles.formActions}>
-            <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={addItem}>
-              {LABELS.submitBtn}
-            </button>
-          </div>
+          {duplicateWarning && (
+            <div style={styles.duplicateWarning}>
+              <strong>Possible duplicate</strong> — this looks similar to an existing {view === "bugs" ? "bug" : "suggestion"}.
+              Double-check the board before submitting.
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={() => addItem(true)}>
+                  Submit anyway
+                </button>
+                <button type="button" className="bt-btn" style={styles.secondaryBtn} onClick={() => setDuplicateWarning(false)}>
+                  Go back
+                </button>
+              </div>
+            </div>
+          )}
+          {!duplicateWarning && (
+            <div style={styles.formActions}>
+              <button type="button" className="bt-btn" style={styles.primaryBtn} onClick={() => addItem()}>
+                {LABELS.submitBtn}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1139,6 +1171,16 @@ const styles = {
     padding: "10px 14px",
     fontSize: 13,
     fontFamily: "var(--font-body), system-ui, sans-serif",
+  },
+  duplicateWarning: {
+    background: "rgba(217,169,83,0.12)",
+    border: "1px solid rgba(217,169,83,0.45)",
+    color: "#e9c876",
+    borderRadius: 6,
+    padding: "12px 14px",
+    fontSize: 13,
+    fontFamily: "var(--font-body), system-ui, sans-serif",
+    lineHeight: 1.5,
   },
   form: {
     maxWidth: 760,
