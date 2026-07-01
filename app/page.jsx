@@ -309,6 +309,22 @@ export default function BugTracker() {
     }
   }
 
+  async function triageDelete(type, id) {
+    const apiEndpoint = type === "bugs" ? "/api/bugs" : "/api/suggestions";
+    const setter = type === "bugs" ? setBugs : setSuggestions;
+    try {
+      const res = await fetch(`${apiEndpoint}/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) throw new Error("failed");
+      setter((prev) => (prev || []).filter((it) => it.id !== id));
+      setError(null);
+    } catch (e) {
+      setError("Couldn't delete that entry — try again.");
+    }
+  }
+
   async function removeItem(id) {
     try {
       const res = await fetch(`${endpoint}/${id}`, {
@@ -537,6 +553,20 @@ export default function BugTracker() {
                         </button>
                       );
                     })}
+                    <button
+                      type="button"
+                      className="bt-icon-btn"
+                      onClick={() => triageDelete(entry.itemType, entry.id)}
+                      style={{
+                        ...styles.triageBtn,
+                        color: "#9a6b5e",
+                        borderColor: "rgba(224,101,74,0.3)",
+                        background: "rgba(224,101,74,0.08)",
+                        marginTop: 2,
+                      }}
+                    >
+                      <Trash2 size={15} /> Delete
+                    </button>
                   </div>
                 </div>
               ))}
