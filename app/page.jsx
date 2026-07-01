@@ -556,16 +556,25 @@ export default function BugTracker() {
                     <button
                       type="button"
                       className="bt-icon-btn"
+                      title="Delete — remove this invalid report"
                       onClick={() => triageDelete(entry.itemType, entry.id)}
                       style={{
-                        ...styles.triageBtn,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 28,
+                        height: 28,
+                        marginTop: 4,
+                        alignSelf: "center",
                         color: "#9a6b5e",
                         borderColor: "rgba(224,101,74,0.3)",
                         background: "rgba(224,101,74,0.08)",
-                        marginTop: 2,
+                        border: "1px solid rgba(224,101,74,0.3)",
+                        borderRadius: 6,
+                        cursor: "pointer",
                       }}
                     >
-                      <Trash2 size={15} /> Delete
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
